@@ -5,6 +5,7 @@ import type { Profile } from '../types'
 interface AuthContextType {
   user: Profile | null
   loading: boolean
+  isAdmin: boolean
   signUp: (username: string, password: string, nickname: string) => Promise<string | null>
   signIn: (username: string, password: string) => Promise<string | null>
   signOut: () => void
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
+      is_admin: result.is_admin || false,
       created_at: '',
     }
     setUser(profile)
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
+      is_admin: result.is_admin || false,
       created_at: '',
     }
     setUser(profile)
@@ -73,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: user?.is_admin === true, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

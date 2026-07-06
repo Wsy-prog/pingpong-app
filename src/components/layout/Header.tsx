@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 
 export function Header() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [unreadCount, setUnreadCount] = useState(0)
   const [chatUnread, setChatUnread] = useState(0)
@@ -84,6 +84,9 @@ export function Header() {
                 </span>
               )}
             </Link>
+            {isAdmin && (
+              <Link to="/admin" className="text-sm text-red-500 hover:text-red-600 font-medium">管理</Link>
+            )}
             <Link to={`/profile/${user.id}`} className="text-sm font-medium text-gray-800">
               {user.nickname || '我'}
             </Link>

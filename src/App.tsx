@@ -17,6 +17,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { TournamentCreatePage } from './pages/TournamentCreatePage'
 import { TournamentSetupPage } from './pages/TournamentSetupPage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
+import { AdminPage } from './pages/AdminPage'
 
 export default function App() {
   useEffect(() => { initEngines() }, [])
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/matches/new" element={<MatchCreatePage />} />
             <Route path="/matches/:id" element={<MatchDetailPage />} />

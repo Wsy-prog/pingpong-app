@@ -3,6 +3,7 @@ export interface Profile {
   username: string
   nickname: string
   elo_score: number
+  is_admin: boolean
   created_at: string
 }
 
