@@ -6,7 +6,7 @@ import { listEngines } from '../lib/tournament'
 import type { TournamentFormat } from '../lib/tournament'
 
 export function TournamentCreatePage() {
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [format, setFormat] = useState<TournamentFormat>('round_robin')

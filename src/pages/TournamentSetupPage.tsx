@@ -8,7 +8,7 @@ import type { Tournament } from '../types'
 
 export function TournamentSetupPage() {
   const { id } = useParams()
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const navigate = useNavigate()
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [players, setPlayers] = useState<{ id: string; name: string; seed: number; group_name?: string }[]>([])

@@ -13,6 +13,7 @@ import { ChatPage } from './pages/ChatPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { MatchCreatePage } from './pages/MatchCreatePage'
 import { MatchDetailPage } from './pages/MatchDetailPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { TournamentCreatePage } from './pages/TournamentCreatePage'
 import { TournamentSetupPage } from './pages/TournamentSetupPage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/rankings" element={<RankingsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/matches/new" element={<MatchCreatePage />} />
             <Route path="/matches/:id" element={<MatchDetailPage />} />

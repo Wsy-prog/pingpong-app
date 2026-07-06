@@ -13,7 +13,7 @@ const features = [
 ]
 
 export function LobbyPage() {
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [loadingMatches, setLoadingMatches] = useState(true)
   const [myRank, setMyRank] = useState<number | null>(null)

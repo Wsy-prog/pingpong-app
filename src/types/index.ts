@@ -1,8 +1,7 @@
 export interface Profile {
   id: string
+  username: string
   nickname: string
-  avatar_url: string | null
-  bio: string | null
   elo_score: number
   created_at: string
 }

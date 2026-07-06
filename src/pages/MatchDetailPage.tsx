@@ -7,7 +7,7 @@ import type { Match, Set } from '../types'
 
 export function MatchDetailPage() {
   const { id } = useParams()
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const [match, setMatch] = useState<Match | null>(null)
   const [sets, setSets] = useState<Set[]>([])
   const [loading, setLoading] = useState(true)

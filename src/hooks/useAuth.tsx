@@ -1,65 +1,79 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types'
-import type { User } from '@supabase/supabase-js'
 
 interface AuthContextType {
-  user: User | null
-  profile: Profile | null
+  user: Profile | null
   loading: boolean
-  signIn: (email: string) => Promise<void>
-  signOut: () => Promise<void>
-  refreshProfile: () => Promise<void>
+  signUp: (username: string, password: string, nickname: string) => Promise<string | null>
+  signIn: (username: string, password: string) => Promise<string | null>
+  signOut: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const STORAGE_KEY = 'pingpong_user'
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [user, setUser] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      setLoading(false)
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setProfile(null)
-    })
-
-    return () => listener?.subscription.unsubscribe()
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try { setUser(JSON.parse(stored)) } catch {}
+    }
+    setLoading(false)
   }, [])
 
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (data) setProfile(data)
-  }
+  const signUp = useCallback(async (username: string, password: string, nickname: string): Promise<string | null> => {
+    const { data, error } = await supabase.rpc('register_user', {
+      p_username: username,
+      p_password: password,
+      p_nickname: nickname,
+    })
+    if (error) return error.message
+    const result = data as any
+    if (result.error) return result.error
+    const profile: Profile = {
+      id: result.id,
+      username: result.username,
+      nickname: result.nickname,
+      elo_score: result.elo_score,
+      created_at: '',
+    }
+    setUser(profile)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
+    return null
+  }, [])
 
-  async function signIn(email: string) {
-    const { error } = await supabase.auth.signInWithOtp({ email })
-    if (error) throw error
-  }
+  const signIn = useCallback(async (username: string, password: string): Promise<string | null> => {
+    const { data, error } = await supabase.rpc('login_user', {
+      p_username: username,
+      p_password: password,
+    })
+    if (error) return error.message
+    const result = data as any
+    if (result.error) return result.error
+    const profile: Profile = {
+      id: result.id,
+      username: result.username,
+      nickname: result.nickname,
+      elo_score: result.elo_score,
+      created_at: '',
+    }
+    setUser(profile)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
+    return null
+  }, [])
 
-  async function signOut() {
-    await supabase.auth.signOut()
-    setProfile(null)
-  }
-
-  async function refreshProfile() {
-    if (user) await fetchProfile(user.id)
-  }
+  const signOut = useCallback(() => {
+    setUser(null)
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )
