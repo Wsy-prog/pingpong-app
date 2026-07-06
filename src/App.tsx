@@ -4,6 +4,7 @@ import { AuthProvider } from './hooks/useAuth'
 import { ProtectedRoute, PublicRoute } from './components/common/ProtectedRoute'
 import { MainLayout } from './components/layout/MainLayout'
 import { initEngines } from './lib/engine-init'
+import { useChatCleanup } from './hooks/useChatCleanup'
 import { LoginPage } from './pages/LoginPage'
 import { LobbyPage } from './pages/LobbyPage'
 import { MatchmakingPage } from './pages/MatchmakingPage'
@@ -21,6 +22,7 @@ import { AdminPage } from './pages/AdminPage'
 
 export default function App() {
   useEffect(() => { initEngines() }, [])
+  useChatCleanup()
 
   return (
     <BrowserRouter>
