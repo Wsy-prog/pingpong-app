@@ -1,65 +1,65 @@
 # 乒乓球约球比赛平台
 
 > 技术栈：React 18 + TypeScript + Vite + Tailwind CSS + Supabase
-> 部署地址：https://pingpong-app-eight.vercel.app
-> 文档目录：C:\001\ 或查看 /c/001/
-> 开发服务器：cd ~/pingpong-app && npm run dev
+> 在线地址：https://pingpong-app-eight.vercel.app
+> 源码位置：~/pingpong-app/
+> 文档存档：C:\001\（14个文件，1780行）
+> 开发命令：cd ~/pingpong-app && npm run dev
 
-## 项目结构
+## ⚡ 快速链接
 
-```
-~/pingpong-app/
-├── src/
-│   ├── components/     # 可复用组件
-│   │   ├── common/     # ProtectedRoute, PublicRoute
-│   │   └── layout/     # Header, MainLayout
-│   ├── pages/          # 12 个页面
-│   ├── hooks/          # useAuth (AuthContext)
-│   ├── lib/
-│   │   ├── supabase.ts # Supabase 客户端
-│   │   ├── elo.ts      # ELO 积分算法
-│   │   ├── engine-init.ts
-│   │   └── tournament/ # 赛事引擎（策略模式）
-│   │       ├── types.ts
-│   │       ├── registry.ts
-│   │       ├── round-robin.ts
-│   │       ├── knockout.ts
-│   │       └── group-knockout.ts
-│   └── types/          # TypeScript 类型
-├── supabase-setup.sql  # 建表脚本
-├── supabase-rpc.sql    # 存储过程
-└── .env                # Supabase 密钥（勿上传）
-```
-
-## 常用命令
-
-| 命令 | 说明 |
+| 用途 | 链接 |
 |------|------|
-| `npm run dev` | 启动开发服务器 (localhost:3000) |
-| `npm run build` | 生产构建 |
-| `npx vercel --prod` | 部署到生产环境 |
+| 网站 | https://pingpong-app-eight.vercel.app |
+| GitHub 仓库 | https://github.com/Wsy-prog/pingpong-app |
+| Supabase 管理 | https://supabase.com/dashboard → 项目 pingpong-app |
+| Vercel 管理 | https://vercel.com/ustc-wsy/pingpong-app |
 
-## 部署
+## 🚀 工作流（自动部署已配置）
 
-- Vercel 项目：`pingpong-app` (ustc-wsy)
-- 环境变量需要在 Vercel Dashboard 设置：
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY`
+```bash
+cd ~/pingpong-app && npm run dev    # 开发
+git add . && git commit -m "说明" && git push   # 推送到 GitHub → Vercel 自动部署
+```
 
-## Supabase
+## 📋 系统概要
 
-- 项目：pingpong-app（ap-northeast-1 东京）
-- 9 张表 + RLS + Auth (Magic Link) + Realtime
-- SQL 脚本：`supabase-setup.sql`
+- **认证**: 自建用户名+密码系统（RPC 函数），存储在 profiles 表
+- **数据库**: 10张表（profiles, matches, sets, tournaments, tournament_players, matchmaking_posts, matchmaking_responses, messages, elo_history, notifications）
+- **RLS**: 已全部关闭
+- **赛事引擎**: 策略模式 + 注册表，循环赛/淘汰赛/混合赛，可扩展
+- **ELO**: 开球网算法，K=32，初始分1500
+- **聊天**: 全局频道 + 私聊 + 实时推送 + 未读标记（三层）
+- **通知**: 系统通知表 + 实时推送 + 角标
 
-## 新增赛制
+## 📄 页面（13个）
 
-1. 在 `src/lib/tournament/` 下新建文件
-2. 实现 `TournamentEngine` 接口
-3. 在 `engine-init.ts` 中注册
-4. 前端表单自动读取注册表
+/login → / → /matches/new → /matches/:id → /tournaments/new
+→ /tournaments/:id/setup → /tournaments/:id → /matchmaking
+→ /rankings → /chat → /notifications → /profile/:id → /history
+
+## 🔑 当前做过的修改记录
+
+- 认证从 Magic Link 改为用户名密码
+- 数据库从 profiles 关联 auth.users 改为独立 profiles 表
+- 添加了通知系统（notifications 表）
+- 聊天私聊添加了未读标记（三层：导航栏+私聊tab+用户列表）
+- 约球添加了响应/接受/放弃功能
+- 个人中心添加了修改密码
+- 添加了"主页"导航按钮
+- 全部 RLS 已关闭
+
+## 📝 待完善功能
+
+- [ ] 赛事通知推送
+- [ ] 约球可附加场地信息
+- [ ] 赛后评价系统
+- [ ] 数据统计图表
+- [ ] 微信小程序打包
 
 ## 备注
 
-`npm run dev` 启动开发服务器后，用浏览器打开 `http://localhost:3000` 即可。
-首次访问需要输入邮箱登录（Magic Link）。
+- .env 文件包含 Supabase 密钥，已加入 .gitignore，不会上传
+- 密钥值存储在本地 ~/pingpong-app/.env 和 Vercel 环境变量中
+- 所有外键约束已删除
+- Realtime 已启用：messages 表 + notifications 表
