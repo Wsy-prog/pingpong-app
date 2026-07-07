@@ -3,7 +3,6 @@ export interface Profile {
   username: string
   nickname: string
   elo_score: number
-  is_admin: boolean
   created_at: string
 }
 
@@ -83,4 +82,57 @@ export interface EloHistory {
   opponent_id: string | null
   opponent_score: number | null
   created_at: string
+}
+
+export interface FortuneItem {
+  id: string
+  content: string
+  category: string
+  is_unique: boolean
+  unique_claimed_by: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface HealthCheckin {
+  id: string
+  profile_id: string
+  checkin_date: string
+  sport_type: string
+  duration_minutes: number
+  created_at: string
+}
+
+export interface HealthWeeklyScore {
+  id: string
+  profile_id: string
+  week_start: string
+  week_end: string
+  score: number
+  days_count: number
+  total_minutes: number
+  max_streak: number
+  detail: {
+    freq_score: number
+    dur_score: number
+    streak_score: number
+    days_count: number
+    total_minutes: number
+    max_streak: number
+  }
+  created_at: string
+}
+
+export interface Announcement {
+  id: string
+  title: string
+  content: string
+  created_by: string
+  created_by_name: string
+  priority: string
+  expires_at: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }

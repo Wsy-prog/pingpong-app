@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
-      is_admin: result.is_admin || false,
+      
       created_at: '',
     }
     setUser(profile)
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
-      is_admin: result.is_admin || false,
+      
       created_at: '',
     }
     setUser(profile)
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin: user?.is_admin === true, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: user?.username === 'guanliyuan', signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )
