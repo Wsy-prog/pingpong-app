@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { MatchCreatePage } from './pages/MatchCreatePage'
 import { MatchDetailPage } from './pages/MatchDetailPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { TournamentHomePage } from './pages/TournamentHomePage'
 import { TournamentCreatePage } from './pages/TournamentCreatePage'
 import { TournamentSetupPage } from './pages/TournamentSetupPage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/matches/new" element={<MatchCreatePage />} />
             <Route path="/matches/:id" element={<MatchDetailPage />} />
+            <Route path="/tournaments" element={<TournamentHomePage />} />
             <Route path="/tournaments/new" element={<TournamentCreatePage />} />
             <Route path="/tournaments/:id/setup" element={<TournamentSetupPage />} />
             <Route path="/tournaments/:id" element={<TournamentDetailPage />} />

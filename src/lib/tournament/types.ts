@@ -19,6 +19,7 @@ export interface Player {
   name: string;
   seed: number;
   group_name?: string;
+  team_name?: string;
 }
 
 export interface GeneratedMatch {

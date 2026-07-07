@@ -25,7 +25,7 @@ interface NewsFlash {
 const features = [
   { title: '自由约球', path: '/matchmaking', icon: '🏓', color: 'bg-green-100 text-green-600' },
   { title: '创建比赛', path: '/matches/new', icon: '⚔️', color: 'bg-orange-100 text-orange-600' },
-  { title: '创建赛事', path: '/tournaments/new', icon: '🏆', color: 'bg-yellow-100 text-yellow-600' },
+  { title: '赛事中心', path: '/tournaments', icon: '🏆', color: 'bg-yellow-100 text-yellow-600' },
   { title: '实时排名', path: '/rankings', icon: '📊', color: 'bg-blue-100 text-blue-600' },
   { title: '聊天大厅', path: '/chat', icon: '💬', color: 'bg-indigo-100 text-indigo-600' },
 ]

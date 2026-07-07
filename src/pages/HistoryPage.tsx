@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { listEngines } from '../lib/tournament'
+import { StatusBadge } from '../components/common/StatusBadge'
 
 interface TournamentItem {
   id: string
   name: string
   format: string
+  category: string
   status: string
   max_players: number | null
   created_at: string
@@ -20,8 +22,6 @@ export function HistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const formatFilter = searchParams.get('format') || ''
   const statusFilter = searchParams.get('status') || ''
-
-  const engines = listEngines()
 
   useEffect(() => { loadTournaments() }, [formatFilter, statusFilter])
 
@@ -42,8 +42,8 @@ export function HistoryPage() {
         const { count: mc } = await supabase
           .from('matches').select('*', { count: 'exact', head: true }).eq('tournament_id', t.id)
         return {
-          id: t.id, name: t.name, format: t.format, status: t.status,
-          max_players: t.max_players, created_at: t.created_at,
+          id: t.id, name: t.name, format: t.format, category: t.category || 'singles',
+          status: t.status, max_players: t.max_players, created_at: t.created_at,
           player_count: pc || 0, match_count: mc || 0,
         }
       })
@@ -53,8 +53,10 @@ export function HistoryPage() {
     setLoading(false)
   }
 
-  const engineNames: Record<string, string> = {}
-  engines.forEach(e => { engineNames[e.type] = e.name })
+  const engines = listEngines()
+  const engineNames: Record<string, string> = Object.fromEntries(
+    engines.map(e => [e.type, e.name])
+  )
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -105,12 +107,11 @@ export function HistoryPage() {
                       {engineNames[t.format] || t.format}
                     </span>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      t.status === 'completed' ? 'bg-green-100 text-green-700' :
-                      t.status === 'in_progress' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-600'
+                      t.category === 'team' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
                     }`}>
-                      {t.status === 'draft' ? '未开始' : t.status === 'in_progress' ? '进行中' : '已结束'}
+                      {t.category === 'team' ? '👥 团体' : '🏓 单人'}
                     </span>
+                    <StatusBadge status={t.status as any} />
                   </div>
                 </div>
                 <div className="text-right text-xs text-gray-400 ml-3">

@@ -9,6 +9,7 @@ export function TournamentCreatePage() {
   const { user: profile } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [category, setCategory] = useState<'singles' | 'team'>('singles')
   const [format, setFormat] = useState<TournamentFormat>('round_robin')
   const [description, setDescription] = useState('')
   const [maxPlayers, setMaxPlayers] = useState(8)
@@ -30,6 +31,7 @@ export function TournamentCreatePage() {
       .from('tournaments')
       .insert({
         name,
+        category,
         format,
         config,
         description: description || null,
@@ -53,6 +55,30 @@ export function TournamentCreatePage() {
           <input value={name} onChange={e => setName(e.target.value)} required
             placeholder="如：社区乒乓球赛 2024"
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">赛事形式</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setCategory('singles')}
+              className={`p-3 rounded-lg border text-left transition ${
+                category === 'singles'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}>
+              <p className="font-medium text-sm">🏓 单人赛</p>
+              <p className="text-xs text-gray-500 mt-0.5">选手个人参赛，按个人排名</p>
+            </button>
+            <button type="button" onClick={() => setCategory('team')}
+              className={`p-3 rounded-lg border text-left transition ${
+                category === 'team'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}>
+              <p className="font-medium text-sm">👥 团体赛</p>
+              <p className="text-xs text-gray-500 mt-0.5">组队参赛，每队≥2人</p>
+            </button>
+          </div>
         </div>
 
         <div>

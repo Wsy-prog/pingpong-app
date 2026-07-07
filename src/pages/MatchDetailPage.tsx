@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { settleMatchElo } from '../lib/elo'
-import type { Match, Set } from '../types'
+import type { Match } from '../types'
+import { StatusBadge } from '../components/common/StatusBadge'
 
 export function MatchDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user: profile } = useAuth()
   const [match, setMatch] = useState<Match | null>(null)
-  const [sets, setSets] = useState<Set[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [newScore1, setNewScore1] = useState('')
-  const [newScore2, setNewScore2] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  // 手动输入局分
+  const [inputP1, setInputP1] = useState('')
+  const [inputP2, setInputP2] = useState('')
+  // 从 tournament config 获取 sets_to_win
+  const [tournamentConfig, setTournamentConfig] = useState<any>(null)
 
   useEffect(() => {
     if (!id) return
@@ -23,9 +28,13 @@ export function MatchDetailPage() {
   async function loadMatch() {
     if (!id) return
     const { data: m } = await supabase.from('matches').select('*').eq('id', id).single()
-    const { data: s } = await supabase.from('sets').select('*').eq('match_id', id).order('set_number')
-    if (m) setMatch(m)
-    if (s) setSets(s)
+    if (m) {
+      setMatch(m)
+      if (m.tournament_id) {
+        const { data: t } = await supabase.from('tournaments').select('config').eq('id', m.tournament_id).single()
+        if (t) setTournamentConfig(t.config)
+      }
+    }
     setLoading(false)
   }
 
@@ -33,42 +42,56 @@ export function MatchDetailPage() {
   const isPlayer2 = match?.player2_id === profile?.id
   const canEdit = isPlayer1 || isPlayer2 || match?.created_by === profile?.id
 
-  const player1Sets = sets.filter(s => s.player1_score > s.player2_score).length
-  const player2Sets = sets.filter(s => s.player2_score > s.player1_score).length
-  const isBestOf = player1Sets >= Math.ceil(sets.length / 2) || player2Sets >= Math.ceil(sets.length / 2)
+  const setsToWin: number = tournamentConfig?.sets_to_win || 2
 
-  async function handleAddSet() {
-    if (!id || !newScore1 || !newScore2 || !canEdit) return
-    const s1 = parseInt(newScore1)
-    const s2 = parseInt(newScore2)
-    if (isNaN(s1) || isNaN(s2)) return
+  const p1Final = match?.player1_sets || 0
+  const p2Final = match?.player2_sets || 0
+  const hasResult = match?.status === 'completed' && (p1Final > 0 || p2Final > 0)
 
-    const nextNumber = sets.length + 1
-    const { error: err } = await supabase.from('sets').insert({
-      match_id: id,
-      set_number: nextNumber,
-      player1_score: s1,
-      player2_score: s2,
-    })
-    if (err) { setError(err.message); return }
-    setNewScore1('')
-    setNewScore2('')
-    loadMatch()
+  // 自动判断输赢
+  function getWinner(): 'player1' | 'player2' | null {
+    const p1 = parseInt(inputP1)
+    const p2 = parseInt(inputP2)
+    if (isNaN(p1) || isNaN(p2)) return null
+    if (p1 === setsToWin && p2 < setsToWin) return 'player1'
+    if (p2 === setsToWin && p1 < setsToWin) return 'player2'
+    return null
   }
 
-  async function handleFinishMatch(winner: 'player1' | 'player2') {
+  const autoWinner = getWinner()
+
+  async function handleSubmit() {
     if (!id || !match) return
-    const winnerName = winner === 'player1' ? match.player1_name : match.player2_name
+    const p1 = parseInt(inputP1)
+    const p2 = parseInt(inputP2)
+    if (isNaN(p1) || isNaN(p2)) { setError('请填写双方局分'); return }
+
+    if (!autoWinner) {
+      if (p1 === p2) { setError('局分不能相同'); return }
+      setError(`胜者必须赢得 ${setsToWin} 局，当前为 ${Math.max(p1, p2)}:${Math.min(p1, p2)}，不合法`);
+      return
+    }
+
+    const winnerName = autoWinner === 'player1' ? match.player1_name : match.player2_name
+    if (!confirm(`确认 ${winnerName} ${p1}:${p2} 获胜？`)) return
+
+    setSubmitting(true)
+    const { data: current } = await supabase.from('matches').select('status').eq('id', id).single()
+    if (current?.status === 'completed') { setError('比赛已结束'); setSubmitting(false); return }
+
     const { error: err } = await supabase
       .from('matches')
       .update({
         status: 'completed',
         winner_name: winnerName,
-        player1_sets: player1Sets,
-        player2_sets: player2Sets,
+        player1_sets: p1,
+        player2_sets: p2,
       })
       .eq('id', id)
+      .eq('status', 'in_progress')
+    setSubmitting(false)
     if (err) { setError(err.message); return }
+    setInputP1(''); setInputP2('')
     loadMatch()
   }
 
@@ -80,8 +103,8 @@ export function MatchDetailPage() {
       const winner = match.winner_name === match.player1_name ? 'player1' : 'player2'
       await settleMatchElo(supabase, match.id, match.player1_id, match.player2_id, winner)
       loadMatch()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '结算失败')
     }
   }
 
@@ -89,127 +112,142 @@ export function MatchDetailPage() {
   if (!match) return <div className="text-center py-10 text-gray-400">比赛不存在</div>
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      {/* 头部信息 */}
+    <div className="max-w-lg mx-auto space-y-4">
       <div>
-        <Link to="/" className="text-sm text-blue-600">&larr; 返回</Link>
-        <h1 className="text-xl font-bold mt-2">{match.player1_name} vs {match.player2_name}</h1>
-        <div className="flex gap-2 mt-1">
-          <span className={`text-xs px-2 py-0.5 rounded-full ${
-            match.status === 'completed' ? 'bg-green-100 text-green-700' :
-            match.status === 'in_progress' ? 'bg-yellow-100 text-yellow-700' :
-            'bg-gray-100 text-gray-600'
-          }`}>
-            {match.status === 'scheduled' && '已创建'}
-            {match.status === 'in_progress' && '进行中'}
-            {match.status === 'completed' && '已结束'}
-          </span>
-          {match.rated && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">积分赛</span>}
+        <button onClick={() => navigate(-1)} className="text-xs text-blue-600">&larr; 返回</button>
+        <h1 className="text-base font-bold mt-1">
+          {match.player1_name} vs {match.player2_name}
+        </h1>
+        <div className="flex gap-1 mt-1 items-center">
+          <StatusBadge status={match.status} />
+          <span className="text-[10px] text-gray-400">{setsToWin * 2 - 1}局{setsToWin}胜</span>
+          {match.rated && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">积分已结算</span>}
         </div>
-        {match.location && <p className="text-sm text-gray-500 mt-1">📍 {match.location}</p>}
-        {match.match_date && <p className="text-sm text-gray-500">🕐 {new Date(match.match_date).toLocaleString('zh-CN')}</p>}
       </div>
 
-      {/* 比分板 */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="grid grid-cols-[1fr_40px_40px] gap-2 px-4 py-2 bg-gray-50 text-sm font-medium text-gray-500">
-          <div></div>
-          <div className="text-center">{match.player1_name}</div>
-          <div className="text-center">{match.player2_name}</div>
-        </div>
-        {sets.map(s => (
-          <div key={s.id} className="grid grid-cols-[1fr_40px_40px] gap-2 px-4 py-2 border-t text-sm">
-            <span className="text-gray-400">第{s.set_number}局</span>
-            <span className={`text-center font-bold ${s.player1_score > s.player2_score ? 'text-green-600' : ''}`}>
-              {s.player1_score}
-            </span>
-            <span className={`text-center font-bold ${s.player2_score > s.player1_score ? 'text-green-600' : ''}`}>
-              {s.player2_score}
-            </span>
+      {/* 比分展示 */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="flex items-center justify-center gap-4 px-4 py-5">
+          <div className="text-center">
+            <p className="text-sm font-medium text-gray-600">{match.player1_name}</p>
+            <p className={`text-3xl font-extrabold ${hasResult && p1Final > p2Final ? 'text-green-600' : ''}`}>
+              {match.status === 'completed' ? p1Final : '-'}
+            </p>
           </div>
-        ))}
-        {sets.length === 0 && (
-          <p className="text-center text-gray-400 py-6 text-sm">暂无局分记录</p>
-        )}
+          <span className="text-xl text-gray-300 font-bold">:</span>
+          <div className="text-center">
+            <p className="text-sm font-medium text-gray-600">{match.player2_name}</p>
+            <p className={`text-3xl font-extrabold ${hasResult && p2Final > p1Final ? 'text-green-600' : ''}`}>
+              {match.status === 'completed' ? p2Final : '-'}
+            </p>
+          </div>
+        </div>
         {match.status === 'completed' && (
-          <div className="px-4 py-3 bg-blue-50 border-t">
-            <span className="text-sm font-medium">
-              胜者：<span className="text-blue-700">{match.winner_name}</span>
-              &nbsp;（{match.player1_sets}:{match.player2_sets}）
-            </span>
+          <div className="px-4 py-2 bg-blue-50 border-t text-sm font-semibold text-center">
+            🏆 {match.winner_name} 胜（{p1Final}:{p2Final}）
           </div>
         )}
       </div>
 
-      {/* 操作区域 */}
+      {/* 登记结果 */}
       {match.status !== 'completed' && canEdit && (
-        <div className="space-y-3">
-          {/* 添加局分 */}
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <h3 className="font-medium text-sm mb-3">添加局分</h3>
-            <div className="flex gap-3 items-end">
-              <div>
-                <label className="text-xs text-gray-500">{match.player1_name}</label>
-                <input type="number" min="0" value={newScore1} onChange={e => setNewScore1(e.target.value)}
-                  className="w-16 px-2 py-1.5 border rounded text-center" />
-              </div>
-              <span className="pb-1.5">:</span>
-              <div>
-                <label className="text-xs text-gray-500">{match.player2_name}</label>
-                <input type="number" min="0" value={newScore2} onChange={e => setNewScore2(e.target.value)}
-                  className="w-16 px-2 py-1.5 border rounded text-center" />
-              </div>
-              <button onClick={handleAddSet}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                添加
-              </button>
-            </div>
-          </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 space-y-4">
+          <p className="text-sm font-medium text-gray-500 text-center">
+            {setsToWin * 2 - 1}局{setsToWin}胜 — 填写双方胜场
+          </p>
 
-          {/* 比赛状态操作 */}
-          <div className="flex gap-2">
-            {match.status === 'scheduled' && (
-              <button onClick={() => supabase.from('matches').update({ status: 'in_progress' }).eq('id', id).then(() => loadMatch())}
-                className="flex-1 py-2 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600">
-                开始比赛
-              </button>
-            )}
-            {match.status === 'in_progress' && (
-              <div className="flex-1 space-y-2">
-                <p className="text-xs text-gray-500 text-center">谁赢了？</p>
-                <div className="flex gap-2">
-                  <button onClick={() => handleFinishMatch('player1')}
-                    className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-                    {match.player1_name} 胜
-                  </button>
-                  <button onClick={() => handleFinishMatch('player2')}
-                    className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
-                    {match.player2_name} 胜
-                  </button>
+          {match.status === 'scheduled' && (
+            <button onClick={async () => {
+              const { error } = await supabase.from('matches').update({ status: 'in_progress' }).eq('id', id)
+              if (error) { setError(error.message); return }
+              loadMatch()
+            }}
+              className="w-full py-3 bg-yellow-500 text-white rounded-lg text-base font-bold hover:bg-yellow-600">
+              开始比赛
+            </button>
+          )}
+
+          {match.status === 'in_progress' && (
+            <>
+              {/* 大号输入框 */}
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex-1 text-center">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{match.player1_name}</p>
+                  <input
+                    type="number"
+                    min="0"
+                    max={setsToWin}
+                    value={inputP1}
+                    onChange={e => setInputP1(e.target.value)}
+                    placeholder="0"
+                    className="w-full text-center text-4xl font-extrabold py-5 px-2 border-2 border-gray-300 rounded-xl
+                      focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100
+                      transition-all"
+                    style={{ fontSize: '2.5rem', height: '80px' }}
+                  />
+                </div>
+                <span className="text-3xl font-extrabold text-gray-400 mt-6">:</span>
+                <div className="flex-1 text-center">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{match.player2_name}</p>
+                  <input
+                    type="number"
+                    min="0"
+                    max={setsToWin}
+                    value={inputP2}
+                    onChange={e => setInputP2(e.target.value)}
+                    placeholder="0"
+                    className="w-full text-center text-4xl font-extrabold py-5 px-2 border-2 border-gray-300 rounded-xl
+                      focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100
+                      transition-all"
+                    style={{ fontSize: '2.5rem', height: '80px' }}
+                  />
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* 自动判定结果提示 */}
+              {autoWinner && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                  <p className="text-base font-bold text-green-700">
+                    {autoWinner === 'player1' ? match.player1_name : match.player2_name}{' '}
+                    {inputP1}:{inputP2} 胜
+                  </p>
+                </div>
+              )}
+
+              {/* 验证提示 */}
+              {inputP1 && inputP2 && !autoWinner && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                  <p className="text-sm font-medium text-red-600">
+                    {parseInt(inputP1) === parseInt(inputP2) ? '局分不能相同' : `无效比分，胜者须赢得 ${setsToWin} 局`}
+                  </p>
+                </div>
+              )}
+
+              {/* 提交按钮 */}
+              <button
+                onClick={handleSubmit}
+                disabled={!autoWinner || submitting}
+                className="w-full py-3.5 bg-green-600 text-white rounded-xl text-lg font-bold
+                  hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                确认提交
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {/* 积分结算 */}
-      {match.status === 'completed' && match.rated === false && match.player1_id && match.player2_id && (
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <p className="text-sm text-gray-600 mb-2">本场比赛尚未结算 ELO 积分</p>
-          <button onClick={handleSettleElo}
-            className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
-            结算积分
-          </button>
-        </div>
+      {/* ELO 结算 */}
+      {match.status === 'completed' && !match.rated && match.player1_id && match.player2_id && canEdit && (
+        <button onClick={handleSettleElo}
+          className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-bold hover:bg-purple-700">
+          结算 ELO 积分
+        </button>
       )}
       {match.rated && match.status === 'completed' && (
-        <div className="bg-green-50 rounded-xl p-4">
-          <p className="text-sm text-green-700 text-center">✅ 积分已结算</p>
-        </div>
+        <div className="bg-green-50 rounded-lg p-2 text-center text-xs text-green-700 font-medium">✅ 积分已结算</div>
       )}
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-red-500 text-sm font-medium text-center">{error}</p>}
     </div>
   )
 }

@@ -42,6 +42,7 @@ export interface Tournament {
   id: string
   name: string
   format: 'single_match' | 'round_robin' | 'knockout' | 'group_knockout' | 'custom_score'
+  category: 'singles' | 'team'
   config: Record<string, unknown>
   status: 'draft' | 'in_progress' | 'completed' | 'cancelled'
   description: string | null
