@@ -125,7 +125,7 @@ export function TournamentHomePage() {
     setJoining(null)
   }
 
-  function canCancel(t: TournamentWithCount): { ok: boolean; reason?: string } {
+  function canCancel(t: TournamentWithCount | (Tournament & { player_count: number })): { ok: boolean; reason?: string } {
     if (t.status === 'in_progress') return { ok: false, reason: '比赛已开始，无法取消' }
     if (!t.start_time) return { ok: true }
     const now = new Date()
@@ -136,13 +136,22 @@ export function TournamentHomePage() {
     return { ok: true }
   }
 
-  function showCancelButton(t: TournamentWithCount): boolean {
+  function showCancelButton(t: TournamentWithCount | (Tournament & { player_count: number })): boolean {
     if (t.status === 'in_progress') return false
     return canCancel(t).ok
   }
 
   async function cancelRegistration(tournamentId: string) {
     if (!profile) return
+    const t = [...ongoingTournaments, ...historyTournaments].find(o => o.id === tournamentId)
+    // 所有有 start_time 且距开赛不足 3 小时的比赛都不可取消
+    if (t) {
+      const cancelCheck = canCancel(t)
+      if (!cancelCheck.ok) {
+        alert(cancelCheck.reason)
+        return
+      }
+    }
     if (!window.confirm('确定取消报名吗？')) return
     setJoining(tournamentId)
     const { error } = await supabase
@@ -239,6 +248,11 @@ export function TournamentHomePage() {
                   className="text-xs text-red-500 hover:text-red-700 underline">
                   {joining === t.id ? '...' : '取消报名'}
                 </button>
+              )}
+              {!showCancelButton(t) && t.start_time && (
+                <span className="text-[10px] text-gray-400 text-center leading-tight mt-1">
+                  距开赛不足3h<br />无法取消
+                </span>
               )}
             </div>
           ) : isFull ? (
@@ -356,11 +370,15 @@ export function TournamentHomePage() {
                           <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium whitespace-nowrap">
                             ✓ 已报名
                           </span>
-                          {t.status === 'draft' && (
+                          {showCancelButton(t) ? (
                             <button onClick={(e) => { e.preventDefault(); cancelRegistration(t.id) }}
                               className="block mt-1 text-xs text-red-500 hover:text-red-700 underline mx-auto">
                               取消报名
                             </button>
+                          ) : t.start_time && (
+                            <span className="block mt-1 text-[10px] text-gray-400 text-center leading-tight">
+                              距开赛不足3h<br />无法取消
+                            </span>
                           )}
                         </div>
                       </div>
