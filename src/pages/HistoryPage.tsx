@@ -107,9 +107,12 @@ export function HistoryPage() {
                       {engineNames[t.format] || t.format}
                     </span>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      t.category === 'team' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                      t.category === 'team' ? 'bg-purple-100 text-purple-700' :
+                      t.category === 'doubles' ? 'bg-orange-100 text-orange-700' :
+                      t.category === 'fun' ? 'bg-pink-100 text-pink-700' :
+                      'bg-green-100 text-green-700'
                     }`}>
-                      {t.category === 'team' ? '👥 团体' : '🏓 单人'}
+                      {t.category === 'team' ? '👥 团体' : t.category === 'doubles' ? '🎯 双打' : t.category === 'fun' ? '🎪 趣味' : '🏓 单人'}
                     </span>
                     <StatusBadge status={t.status as any} />
                   </div>

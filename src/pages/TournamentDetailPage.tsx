@@ -89,9 +89,14 @@ export function TournamentDetailPage() {
             {engine?.name || tournament.format}
           </span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${
-            tournament.category === 'team' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+            tournament.category === 'team' ? 'bg-purple-100 text-purple-700' :
+            tournament.category === 'doubles' ? 'bg-orange-100 text-orange-700' :
+            tournament.category === 'fun' ? 'bg-pink-100 text-pink-700' :
+            'bg-green-100 text-green-700'
           }`}>
-            {tournament.category === 'team' ? '👥 团体赛' : '🏓 单人赛'}
+            {tournament.category === 'team' ? '👥 团体赛' :
+             tournament.category === 'doubles' ? '🎯 双打' :
+             tournament.category === 'fun' ? '🎪 趣味' : '🏓 单人赛'}
           </span>
         </div>
         {tournament.description && <p className="text-sm text-gray-500 mt-2">{tournament.description}</p>}
@@ -215,7 +220,7 @@ export function TournamentDetailPage() {
       {/* ===== 选手列表 ===== */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">
-          {tournament.category === 'team' ? '队员列表（按队伍）' : '参赛选手'} ({players.length})
+          {tournament.category === 'team' ? '队员列表（按队伍）' : tournament.category === 'doubles' ? '双打选手' : tournament.category === 'fun' ? '选手' : '参赛选手'} ({players.length})
         </div>
         {players.length === 0 ? (
           <p className="text-center text-gray-400 py-4 text-sm">暂无选手</p>

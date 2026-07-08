@@ -30,6 +30,11 @@ export function TournamentSetupPage() {
   const [selectedTeam, setSelectedTeam] = useState('')
   const [newTeamName, setNewTeamName] = useState('')
 
+  // 趣味团体赛：队长 + 阶段编排
+  const [captain1, setCaptain1] = useState('')
+  const [captain2, setCaptain2] = useState('')
+  const [stageOrder, setStageOrder] = useState<{ stage: number; type: string; p1: string; p2: string }[]>([])
+
   useEffect(() => {
     if (id) loadTournament()
   }, [id])
@@ -96,9 +101,15 @@ export function TournamentSetupPage() {
 
   async function generateMatches() {
     if (!tournament || !id || !profile) { setError('请先登录'); return }
-    if (players.length < 2) { setError('至少需要2名选手'); return }
 
-    // 团体赛：检查每队人数 ≥ 2
+    // 最低人数验证
+    const minPlayers = tournament.category === 'singles' ? 2 : tournament.category === 'doubles' ? 4 : 6
+    if (players.length < minPlayers) {
+      setError(`${tournament.category === 'singles' ? '单人赛' : tournament.category === 'doubles' ? '双打' : '团体赛'}至少需要 ${minPlayers} 名选手`)
+      return
+    }
+
+    // 团体赛：检查每队人数 ≥ 3
     if (tournament.category === 'team') {
       const teamCounts = new Map<string, number>()
       players.forEach(p => {
@@ -106,9 +117,72 @@ export function TournamentSetupPage() {
         if (tn) teamCounts.set(tn, (teamCounts.get(tn) || 0) + 1)
       })
       for (const [team, count] of teamCounts) {
-        if (count < 2) { setError(`队伍「${team}」只有 ${count} 人，团体赛每队至少需要 2 人`); return }
+        if (count < 3) { setError(`队伍「${team}」只有 ${count} 人，团体赛每队至少需要 3 人`); return }
       }
       if (teamCounts.size < 2) { setError('团体赛至少需要 2 支队伍'); return }
+    }
+
+    // 最低人数时绕过引擎，直接生成一场决胜赛
+    if (players.length === minPlayers) {
+      let p1Name: string, p2Name: string
+      let extraConfig: Record<string, unknown> = {}
+
+      if (tournament.category === 'singles') {
+        p1Name = players[0].name
+        p2Name = players[1].name
+      } else if (tournament.category === 'doubles') {
+        // 4人 → 2组双打 → 前2人 vs 后2人
+        p1Name = `${players[0].name}/${players[1].name}`
+        p2Name = `${players[2].name}/${players[3].name}`
+      } else if (tournament.category === 'fun') {
+        if (tournament.format === 'fun_100_individual') {
+          p1Name = players[0].name
+          p2Name = players[1].name
+          extraConfig = { target_score: 100 }
+        } else {
+          // fun_100_team: 2 teams of 5
+          const teamNames = [...new Set(players.map(p => p.team_name || p.group_name || ''))].filter(Boolean)
+          const t1 = teamNames[0] || '队伍1'
+          const t2 = teamNames[1] || '队伍2'
+          p1Name = t1
+          p2Name = t2
+
+          // 从 UI state 获取队长和阶段编排
+          const t1Players = players.filter(p => (p.team_name || p.group_name) === t1)
+          const t2Players = players.filter(p => (p.team_name || p.group_name) === t2)
+          extraConfig = {
+            target_score: 100,
+            mode: 'team_relay',
+            team1: { name: t1, captain: captain1 || t1Players[0]?.name, players: t1Players.map(p => p.name) },
+            team2: { name: t2, captain: captain2 || t2Players[0]?.name, players: t2Players.map(p => p.name) },
+            stages: stageOrder.length === 7 ? stageOrder : getDefaultStages(t1Players.map(p => p.name), t2Players.map(p => p.name)),
+            current_stage: 0,
+          }
+        }
+      } else {
+        // 团体赛：2队对决
+        const teamNames = [...new Set(players.map(p => p.team_name || p.group_name || ''))].filter(Boolean)
+        p1Name = teamNames[0] || players[0].name
+        p2Name = teamNames[1] || players[1].name
+      }
+
+      // 合并 extraConfig 到 tournament config
+      if (Object.keys(extraConfig).length > 0) {
+        await supabase.from('tournaments').update({ config: { ...tournament.config, ...extraConfig } }).eq('id', id)
+      }
+
+      const { error: err } = await supabase.from('matches').insert({
+        tournament_id: id,
+        title: `${p1Name} vs ${p2Name}`,
+        player1_name: p1Name,
+        player2_name: p2Name,
+        created_by: profile.id,
+      })
+
+      if (err) { setError(err.message); return }
+      await supabase.from('tournaments').update({ status: 'in_progress' }).eq('id', id)
+      navigate(`/tournaments/${id}`)
+      return
     }
 
     const engine = getEngine(tournament.format)
@@ -132,8 +206,8 @@ export function TournamentSetupPage() {
       created_by: profile.id,
     }))
 
-    const { error: err } = await supabase.from('matches').insert(inserts)
-    if (err) { setError(err.message); return }
+    const { error: err2 } = await supabase.from('matches').insert(inserts)
+    if (err2) { setError(err2.message); return }
 
     // 更新赛事状态
     await supabase.from('tournaments').update({ status: 'in_progress' }).eq('id', id)
@@ -144,6 +218,10 @@ export function TournamentSetupPage() {
   if (!tournament) return <div className="text-center py-10 text-gray-400">赛事不存在</div>
 
   const isTeam = tournament.category === 'team'
+  const isDoubles = tournament.category === 'doubles'
+  const isFun = tournament.category === 'fun'
+  const catLabel = isTeam ? '👥 团体赛' : isDoubles ? '🎯 双打' : isFun ? '🎪 趣味乒乓' : '🏓 单人赛'
+  const minPlayers = isTeam ? 6 : isDoubles ? 4 : isFun ? (tournament.format === 'fun_100_individual' ? 2 : 10) : 2
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -151,13 +229,13 @@ export function TournamentSetupPage() {
         <Link to={`/tournaments/${id}`} className="text-sm text-blue-600">&larr; 返回赛事</Link>
         <h1 className="text-xl font-bold mt-1">配置赛事</h1>
         <p className="text-sm text-gray-500">
-          {tournament.name} — {isTeam ? '👥 团体赛' : '🏓 单人赛'} — {players.length}人
+          {tournament.name} — {catLabel} — {players.length}人
         </p>
       </div>
 
       {/* 添加选手 */}
       <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
-        <h2 className="font-medium">{isTeam ? '添加队员' : '添加选手'}</h2>
+        <h2 className="font-medium">{isTeam ? '添加队员' : isDoubles ? '添加双打选手' : '添加选手'}</h2>
 
         {/* 团体赛：队伍选择 */}
         {isTeam && (
@@ -228,7 +306,7 @@ export function TournamentSetupPage() {
         {/* 手动输入 */}
         <div className="flex gap-2">
           <input value={manualName} onChange={e => setManualName(e.target.value)}
-            placeholder={isTeam ? '手动输入队员名...' : '手动输入选手名...'}
+            placeholder={isTeam ? '手动输入队员名...' : isDoubles ? '手动输入双打选手名...' : '手动输入选手名...'}
             className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <button onClick={() => { if (manualName.trim()) { addPlayer(manualName.trim()); setManualName('') }}}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
@@ -239,10 +317,20 @@ export function TournamentSetupPage() {
         {error && <p className="text-red-500 text-sm">{error}</p>}
       </div>
 
+      {/* 趣味团体赛：队长指定 + 阶段编排 */}
+      {isFun && tournament.format === 'fun_100_team' && players.length >= 10 && (
+        <FunTeamSetup
+          players={players}
+          captain1={captain1} setCaptain1={setCaptain1}
+          captain2={captain2} setCaptain2={setCaptain2}
+          stageOrder={stageOrder} setStageOrder={setStageOrder}
+        />
+      )}
+
       {/* 选手列表 */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 flex justify-between">
-          <span className="font-medium text-sm">{isTeam ? '队员列表（按队伍）' : '参赛选手'}</span>
+          <span className="font-medium text-sm">{isTeam ? '队员列表（按队伍）' : isDoubles ? '双打选手' : isFun ? (tournament.format === 'fun_100_team' ? '队员列表（每队5人）' : '参赛选手') : '参赛选手'}</span>
           <span className="text-sm text-gray-500">{players.length}/{tournament.max_players || '∞'}</span>
         </div>
         {players.length === 0 ? (
@@ -305,12 +393,149 @@ export function TournamentSetupPage() {
       </div>
 
       {/* 生成对阵 */}
-      {players.length >= 2 && (
+      {players.length >= minPlayers && (
         <button onClick={generateMatches}
           className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
           生成赛程并开始赛事
         </button>
       )}
+    </div>
+  )
+}
+
+// 7个阶段的类型定义
+const STAGE_TYPES = ['单打', '单打', '单打', '单打', '双打', '单打', '单打']
+
+function getDefaultStages(team1Players: string[], team2Players: string[]): { stage: number; type: string; p1: string; p2: string }[] {
+  // 默认编排：每人出场2次，轮流上场
+  const t1 = [...team1Players]
+  const t2 = [...team2Players]
+  const stages: { stage: number; type: string; p1: string; p2: string }[] = []
+
+  // 简单默认：依次循环使用队员
+  for (let i = 0; i < 7; i++) {
+    stages.push({
+      stage: i + 1,
+      type: STAGE_TYPES[i],
+      p1: t1[i % 5],
+      p2: t2[i % 5],
+    })
+  }
+  return stages
+}
+
+function FunTeamSetup({
+  players, captain1, setCaptain1, captain2, setCaptain2,
+  stageOrder, setStageOrder,
+}: {
+  players: { id: string; name: string; team_name?: string; group_name?: string }[]
+  captain1: string; setCaptain1: (v: string) => void
+  captain2: string; setCaptain2: (v: string) => void
+  stageOrder: { stage: number; type: string; p1: string; p2: string }[]
+  setStageOrder: (v: { stage: number; type: string; p1: string; p2: string }[]) => void
+}) {
+  const teamNames = [...new Set(players.map(p => p.team_name || p.group_name || ''))].filter(Boolean)
+  const t1 = teamNames[0] || '队伍1'
+  const t2 = teamNames[1] || '队伍2'
+  const t1Players = players.filter(p => (p.team_name || p.group_name) === t1).map(p => p.name)
+  const t2Players = players.filter(p => (p.team_name || p.group_name) === t2).map(p => p.name)
+
+  // Auto-init stage order
+  if (stageOrder.length !== 7 && t1Players.length === 5 && t2Players.length === 5) {
+    setStageOrder(getDefaultStages(t1Players, t2Players))
+  }
+
+  // Count appearances per player
+  function countAppearances(name: string): number {
+    return stageOrder.filter(s => s.p1 === name || s.p2 === name).length
+  }
+
+  function updateStage(index: number, side: 'p1' | 'p2', value: string) {
+    const updated = stageOrder.map((s, i) => i === index ? { ...s, [side]: value } : s)
+    setStageOrder(updated)
+  }
+
+  const isValid = stageOrder.length === 7 && [...t1Players, ...t2Players].every(p => countAppearances(p) === 2)
+
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm space-y-4 border-2 border-orange-200">
+      <h2 className="font-medium text-orange-700">⚙️ 百分团体大赛 — 队伍配置</h2>
+
+      {/* 队长选择 */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-blue-50 rounded-lg p-3">
+          <p className="text-sm font-bold text-blue-700 mb-2">{t1} 👑 队长</p>
+          <div className="space-y-1">
+            {t1Players.map(name => (
+              <label key={name} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" name="captain1" checked={captain1 === name} onChange={() => setCaptain1(name)}
+                  className="text-blue-600" />
+                {name}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="bg-red-50 rounded-lg p-3">
+          <p className="text-sm font-bold text-red-700 mb-2">{t2} 👑 队长</p>
+          <div className="space-y-1">
+            {t2Players.map(name => (
+              <label key={name} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" name="captain2" checked={captain2 === name} onChange={() => setCaptain2(name)}
+                  className="text-red-600" />
+                {name}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 阶段编排 */}
+      <div>
+        <p className="text-sm font-bold text-gray-700 mb-2">📋 7阶段出场编排（每人恰好出场2次）</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-2 py-1.5 text-left">阶段</th>
+                <th className="px-2 py-1.5 text-left">类型</th>
+                <th className="px-2 py-1.5 text-left text-blue-600">{t1}</th>
+                <th className="px-2 py-1.5 text-left text-red-600">{t2}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {stageOrder.map((s, i) => (
+                <tr key={i} className={i === 4 ? 'bg-yellow-50' : ''}>
+                  <td className="px-2 py-1.5 font-medium">{i + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${s.type === '双打' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {s.type}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <select value={s.p1} onChange={e => updateStage(i, 'p1', e.target.value)}
+                      className="w-full text-xs border rounded px-1 py-0.5">
+                      {t1Players.map(p => (
+                        <option key={p} value={p}>{p} ({countAppearances(p)}次)</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <select value={s.p2} onChange={e => updateStage(i, 'p2', e.target.value)}
+                      className="w-full text-xs border rounded px-1 py-0.5">
+                      {t2Players.map(p => (
+                        <option key={p} value={p}>{p} ({countAppearances(p)}次)</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className={`text-xs mt-2 ${isValid ? 'text-green-600 font-medium' : 'text-red-500'}`}>
+          {isValid ? '✅ 编排有效，每人恰好出场2次' : '⚠️ 请确保每名队员恰好出场2次'}
+        </p>
+      </div>
     </div>
   )
 }

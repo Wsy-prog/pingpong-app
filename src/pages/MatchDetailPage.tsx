@@ -42,6 +42,10 @@ export function MatchDetailPage() {
   const isPlayer2 = match?.player2_id === profile?.id
   const canEdit = isPlayer1 || isPlayer2 || match?.created_by === profile?.id
 
+  const isFunMode = !!tournamentConfig?.target_score
+  const targetScore: number = tournamentConfig?.target_score || 100
+  const isTeamFun = isFunMode && tournamentConfig?.mode === 'team_relay'
+  const stages: any[] = tournamentConfig?.stages || []
   const setsToWin: number = tournamentConfig?.sets_to_win || 2
 
   const p1Final = match?.player1_sets || 0
@@ -53,6 +57,15 @@ export function MatchDetailPage() {
     const p1 = parseInt(inputP1)
     const p2 = parseInt(inputP2)
     if (isNaN(p1) || isNaN(p2)) return null
+
+    if (isFunMode) {
+      // 百分制：任一≥targetScore且领先→获胜
+      if (p1 >= targetScore && p1 > p2) return 'player1'
+      if (p2 >= targetScore && p2 > p1) return 'player2'
+      return null
+    }
+
+    // 传统局分制
     if (p1 === setsToWin && p2 < setsToWin) return 'player1'
     if (p2 === setsToWin && p1 < setsToWin) return 'player2'
     return null
@@ -67,28 +80,48 @@ export function MatchDetailPage() {
     if (isNaN(p1) || isNaN(p2)) { setError('请填写双方局分'); return }
 
     if (!autoWinner) {
-      if (p1 === p2) { setError('局分不能相同'); return }
-      setError(`胜者必须赢得 ${setsToWin} 局，当前为 ${Math.max(p1, p2)}:${Math.min(p1, p2)}，不合法`);
+      if (p1 === p2) { setError(isFunMode ? '分数不能相同' : '局分不能相同'); return }
+      if (isFunMode) {
+        setError(`先达到 ${targetScore} 分且领先对手者胜，当前 ${Math.max(p1, p2)}:${Math.min(p1, p2)} 不满足`);
+      } else {
+        setError(`胜者必须赢得 ${setsToWin} 局，当前为 ${Math.max(p1, p2)}:${Math.min(p1, p2)}，不合法`);
+      }
       return
     }
 
     const winnerName = autoWinner === 'player1' ? match.player1_name : match.player2_name
-    if (!confirm(`确认 ${winnerName} ${p1}:${p2} 获胜？`)) return
+    const confirmMsg = isFunMode
+      ? `确认 ${winnerName} 以 ${p1}:${p2}（先得${targetScore}分）获胜？`
+      : `确认 ${winnerName} ${p1}:${p2} 获胜？`
+    if (!confirm(confirmMsg)) return
 
     setSubmitting(true)
     const { data: current } = await supabase.from('matches').select('status').eq('id', id).single()
     if (current?.status === 'completed') { setError('比赛已结束'); setSubmitting(false); return }
 
+    // 趣味团体赛：判断是否结束
+    const gameOver = isFunMode && (p1 >= targetScore || p2 >= targetScore)
+    const isGameOver = isTeamFun ? gameOver : true
+
     const { error: err } = await supabase
       .from('matches')
       .update({
-        status: 'completed',
-        winner_name: winnerName,
+        status: isGameOver ? 'completed' : 'in_progress',
+        winner_name: isGameOver ? winnerName : null,
         player1_sets: p1,
         player2_sets: p2,
       })
       .eq('id', id)
       .eq('status', 'in_progress')
+
+    // 团体赛未结束：推进到下一阶段
+    if (isTeamFun && !isGameOver && match.tournament_id) {
+      const nextStage = (tournamentConfig?.current_stage || 0) + 1
+      await supabase.from('tournaments').update({
+        config: { ...tournamentConfig, current_stage: nextStage }
+      }).eq('id', match.tournament_id)
+    }
+
     setSubmitting(false)
     if (err) { setError(err.message); return }
     setInputP1(''); setInputP2('')
@@ -120,7 +153,9 @@ export function MatchDetailPage() {
         </h1>
         <div className="flex gap-1 mt-1 items-center">
           <StatusBadge status={match.status} />
-          <span className="text-[10px] text-gray-400">{setsToWin * 2 - 1}局{setsToWin}胜</span>
+          <span className="text-[10px] text-gray-400">
+            {isFunMode ? `百分制（先得${targetScore}分胜）` : `${setsToWin * 2 - 1}局${setsToWin}胜`}
+          </span>
           {match.rated && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">积分已结算</span>}
         </div>
       </div>
@@ -144,7 +179,7 @@ export function MatchDetailPage() {
         </div>
         {match.status === 'completed' && (
           <div className="px-4 py-2 bg-blue-50 border-t text-sm font-semibold text-center">
-            🏆 {match.winner_name} 胜（{p1Final}:{p2Final}）
+            🏆 {match.winner_name} 胜（{p1Final}:{p2Final}{isFunMode ? ` 先得${targetScore}分` : ''}）
           </div>
         )}
       </div>
@@ -153,8 +188,37 @@ export function MatchDetailPage() {
       {match.status !== 'completed' && canEdit && (
         <div className="bg-white rounded-lg shadow-sm p-4 space-y-4">
           <p className="text-sm font-medium text-gray-500 text-center">
-            {setsToWin * 2 - 1}局{setsToWin}胜 — 填写双方胜场
+            {isFunMode
+              ? `百分制 — 先得${targetScore}分者胜`
+              : `${setsToWin * 2 - 1}局${setsToWin}胜 — 填写双方胜场`}
           </p>
+
+          {/* 团体赛阶段信息 */}
+          {isTeamFun && stages.length > 0 && (() => {
+            const currentStage = (tournamentConfig?.current_stage || 0)
+            const stage = stages[currentStage]
+            return stage ? (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center space-y-2">
+                <p className="text-xs text-orange-500 font-medium">
+                  第 {stage.stage} / 7 阶段 · {stage.type}
+                </p>
+                <p className="text-sm font-bold text-orange-800">
+                  {stage.p1} vs {stage.p2}
+                </p>
+                <p className="text-xs text-orange-600">
+                  累计比分：{match.player1_name} <strong>{p1Final}</strong> : <strong>{p2Final}</strong> {match.player2_name}
+                </p>
+                {/* 里程碑检测 */}
+                {(() => {
+                  const milestones = [15, 30, 45, 60, 75, 90]
+                  const nextMilestone = milestones.find(m => m > Math.max(p1Final, p2Final))
+                  return nextMilestone ? (
+                    <p className="text-[10px] text-gray-400">下一换人节点：{nextMilestone}分</p>
+                  ) : null
+                })()}
+              </div>
+            ) : null
+          })()}
 
           {match.status === 'scheduled' && (
             <button onClick={async () => {
@@ -172,11 +236,15 @@ export function MatchDetailPage() {
               {/* 大号输入框 */}
               <div className="flex items-center justify-center gap-3">
                 <div className="flex-1 text-center">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">{match.player1_name}</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">
+                    {isTeamFun && stages.length > 0
+                      ? stages[(tournamentConfig?.current_stage || 0)]?.p1 || match.player1_name
+                      : match.player1_name}
+                  </p>
                   <input
                     type="number"
                     min="0"
-                    max={setsToWin}
+                    max={isFunMode ? targetScore : setsToWin}
                     value={inputP1}
                     onChange={e => setInputP1(e.target.value)}
                     placeholder="0"
@@ -185,14 +253,19 @@ export function MatchDetailPage() {
                       transition-all"
                     style={{ fontSize: '2.5rem', height: '80px' }}
                   />
+                  {isFunMode && <p className="text-[10px] text-gray-400 mt-1">当前累计：{p1Final}</p>}
                 </div>
                 <span className="text-3xl font-extrabold text-gray-400 mt-6">:</span>
                 <div className="flex-1 text-center">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">{match.player2_name}</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">
+                    {isTeamFun && stages.length > 0
+                      ? stages[(tournamentConfig?.current_stage || 0)]?.p2 || match.player2_name
+                      : match.player2_name}
+                  </p>
                   <input
                     type="number"
                     min="0"
-                    max={setsToWin}
+                    max={isFunMode ? targetScore : setsToWin}
                     value={inputP2}
                     onChange={e => setInputP2(e.target.value)}
                     placeholder="0"
@@ -201,6 +274,7 @@ export function MatchDetailPage() {
                       transition-all"
                     style={{ fontSize: '2.5rem', height: '80px' }}
                   />
+                  {isFunMode && <p className="text-[10px] text-gray-400 mt-1">当前累计：{p2Final}</p>}
                 </div>
               </div>
 
@@ -208,8 +282,10 @@ export function MatchDetailPage() {
               {autoWinner && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
                   <p className="text-base font-bold text-green-700">
-                    {autoWinner === 'player1' ? match.player1_name : match.player2_name}{' '}
-                    {inputP1}:{inputP2} 胜
+                    {autoWinner === 'player1'
+                      ? (isTeamFun && stages.length > 0 ? stages[(tournamentConfig?.current_stage || 0)]?.p1 : match.player1_name)
+                      : (isTeamFun && stages.length > 0 ? stages[(tournamentConfig?.current_stage || 0)]?.p2 : match.player2_name)}{' '}
+                    {inputP1}:{inputP2} {isFunMode ? `（先得${targetScore}分）` : ''}胜
                   </p>
                 </div>
               )}
@@ -218,7 +294,11 @@ export function MatchDetailPage() {
               {inputP1 && inputP2 && !autoWinner && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
                   <p className="text-sm font-medium text-red-600">
-                    {parseInt(inputP1) === parseInt(inputP2) ? '局分不能相同' : `无效比分，胜者须赢得 ${setsToWin} 局`}
+                    {parseInt(inputP1) === parseInt(inputP2)
+                      ? (isFunMode ? '分数不能相同' : '局分不能相同')
+                      : isFunMode
+                        ? `先达到 ${targetScore} 分且领先对手者胜`
+                        : `无效比分，胜者须赢得 ${setsToWin} 局`}
                   </p>
                 </div>
               )}
@@ -229,7 +309,7 @@ export function MatchDetailPage() {
                 disabled={!autoWinner || submitting}
                 className="w-full py-3.5 bg-green-600 text-white rounded-xl text-lg font-bold
                   hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
-                确认提交
+                {isTeamFun ? '提交阶段得分' : '确认提交'}
               </button>
             </>
           )}

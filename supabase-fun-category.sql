@@ -1,12 +1,7 @@
--- 赛事分类：单人赛 / 团体赛
+-- 更新 category CHECK 约束以支持 doubles 和 fun
 -- 在 Supabase SQL Editor 中执行以下语句：
 -- https://supabase.com/dashboard → 项目 pingpong-app → SQL Editor
 
--- 更新 category CHECK 约束以支持所有类别
 ALTER TABLE public.tournaments DROP CONSTRAINT IF EXISTS tournaments_category_check;
-ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'singles';
 ALTER TABLE public.tournaments ADD CONSTRAINT tournaments_category_check
   CHECK (category IN ('singles', 'doubles', 'team', 'fun'));
-
--- 团体赛需要 team_name 记录选手所属队伍
-ALTER TABLE public.tournament_players ADD COLUMN IF NOT EXISTS team_name TEXT;

@@ -3,7 +3,9 @@ export type TournamentFormat =
   | 'round_robin'
   | 'knockout'
   | 'group_knockout'
-  | 'custom_score';
+  | 'custom_score'
+  | 'fun_100_individual'
+  | 'fun_100_team';
 
 export interface TournamentConfig {
   sets_to_win: number;         // 每场比赛赢几局获胜（如 3局2胜）
