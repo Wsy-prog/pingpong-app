@@ -14,10 +14,23 @@ export function TournamentCreatePage() {
   const [description, setDescription] = useState('')
   const [maxPlayers, setMaxPlayers] = useState(8)
   const [setsToWin, setSetsToWin] = useState(3)
+  const [startTime, setStartTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   const engines = listEngines()
+
+  function hasDirtyFields() {
+    return name.trim() !== '' || description.trim() !== '' || startTime !== ''
+  }
+
+  function handleBack() {
+    if (hasDirtyFields()) {
+      const ok = window.confirm('尚未创建完成的比赛将会消失，是否返回？')
+      if (!ok) return
+    }
+    navigate('/tournaments')
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -26,6 +39,8 @@ export function TournamentCreatePage() {
     setError('')
 
     const config = { sets_to_win: setsToWin }
+
+    const startISO = startTime ? new Date(startTime).toISOString() : null
 
     const { data, error: err } = await supabase
       .from('tournaments')
@@ -36,6 +51,7 @@ export function TournamentCreatePage() {
         config,
         description: description || null,
         max_players: maxPlayers,
+        start_time: startISO,
         created_by: profile.id,
       })
       .select()
@@ -47,6 +63,7 @@ export function TournamentCreatePage() {
 
   return (
     <div className="max-w-lg mx-auto">
+      <button onClick={handleBack} className="text-sm text-blue-600 mb-4 block">&larr; 返回菜单</button>
       <h1 className="text-xl font-bold mb-6">创建赛事</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -110,6 +127,14 @@ export function TournamentCreatePage() {
               onChange={e => setSetsToWin(parseInt(e.target.value) || 3)}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">比赛开始时间（可选）</label>
+          <input type="datetime-local" value={startTime}
+            onChange={e => setStartTime(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <p className="text-xs text-gray-400 mt-1">设置后，选手可在开始前3小时取消报名</p>
         </div>
 
         <div>

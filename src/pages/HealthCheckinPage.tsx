@@ -8,7 +8,15 @@ function getWeekStart(d: Date): string {
   const day = dt.getDay()
   const diff = dt.getDate() - day + (day === 0 ? -6 : 1)
   dt.setDate(diff)
-  return dt.toISOString().split('T')[0]
+  return localDateStr(dt)
+}
+
+function localDateStr(d?: Date): string {
+  const date = d || new Date()
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function getLastWeekStart(): string {
@@ -17,11 +25,12 @@ function getLastWeekStart(): string {
   return getWeekStart(d)
 }
 
-/** 单次时长评分 (0~5) */
+/** 单次时长评分 (0~5)，30~90分钟为最佳区间得满分，超出递减 */
 function calcDurationScore(minutes: number): number {
   if (minutes >= 30 && minutes <= 90) return 5
   if (minutes < 30) return +(minutes / 30 * 5).toFixed(1)
-  return Math.round((5 + Math.max(0, 5 * (1 - (minutes - 90) / 90))) * 10) / 10
+  // 超过90分钟，逐渐递减，180分钟时降至2.5分
+  return Math.max(0, +(5 - 2.5 * ((minutes - 90) / 90)).toFixed(1))
 }
 
 export function HealthCheckinPage() {
@@ -50,7 +59,7 @@ export function HealthCheckinPage() {
 
   async function loadData() {
     if (!user) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateStr()
     const ws = getWeekStart(new Date())
 
     const { data: todayD } = await supabase.from('health_checkins').select('*')
@@ -69,14 +78,12 @@ export function HealthCheckinPage() {
     // 如果今天已打卡，计算今日得分展示
     if (todayD) {
       const d = todayD as HealthCheckin
+      setDuration(d.duration_minutes) // 更新显示为当天的实际时长
       const durScore = calcDurationScore(d.duration_minutes)
       const daysAdded = +(40 / 7).toFixed(1)
       const checkins = (weekD || []) as HealthCheckin[]
       const streakInfo = calcStreakContribution(checkins, d.duration_minutes)
-      const streakAdded = streakInfo.streak >= 2
-        ? [0, 2, 5, 8, 10, 12, 15][Math.min(streakInfo.streak, 7)] -
-          (streakInfo.streak > 2 ? [0, 2, 5, 8, 10, 12, 15][Math.min(streakInfo.streak - 1, 7)] : 0)
-        : 0
+      const streakAdded = streakInfo.streak >= 2 ? streakInfo.added : 0
       setTodayResult({ durScore, daysAdded, streakAdded, total: +(durScore + daysAdded + streakAdded).toFixed(1) })
     }
 
@@ -85,29 +92,36 @@ export function HealthCheckinPage() {
     const lwe = new Date(lws)
     lwe.setDate(lwe.getDate() + 6)
     const { count } = await supabase.from('health_checkins').select('*', { count: 'exact', head: true })
-      .eq('profile_id', user.id).gte('checkin_date', lws).lte('checkin_date', lwe.toISOString().split('T')[0])
+      .eq('profile_id', user.id).gte('checkin_date', lws).lte('checkin_date', localDateStr(lwe))
     setHasLastWeekData((count || 0) > 0)
 
     setLoading(false)
   }
 
-  /** 计算连续天数变化 */
+  /** 计算当天打卡后的连续天数（从今天往前数连续打卡几天） */
   function calcStreakContribution(checkins: HealthCheckin[], _newMinutes: number): { streak: number; added: number } {
-    const all = [...checkins, { checkin_date: new Date().toISOString().split('T')[0] } as HealthCheckin]
-    const dates = all.map(c => c.checkin_date).sort()
-    let maxStreak = 0, cur = 0, prev = ''
-    for (const d of dates) {
-      const dateObj = new Date(d)
-      if (prev) {
-        const diffDays = (dateObj.getTime() - new Date(prev).getTime()) / 86400000
-        if (diffDays === 1) cur++
-        else cur = 1
-      } else { cur = 1 }
-      if (cur > maxStreak) maxStreak = cur
-      prev = d
+    const today = localDateStr()
+    // 去重 + 排序
+    const dateSet = new Set(checkins.map(c => c.checkin_date))
+    dateSet.add(today)
+    const dates = [...dateSet].sort()
+
+    // 从今天往前，数连续天数
+    let streak = 0
+    for (let i = dates.length - 1; i >= 0; i--) {
+      if (i === dates.length - 1 && dates[i] !== today) break // 今天没打卡
+      if (i < dates.length - 1) {
+        const curr = new Date(dates[i])
+        const next = new Date(dates[i + 1])
+        const diff = (next.getTime() - curr.getTime()) / 86400000
+        if (diff !== 1) break
+      }
+      streak++
     }
-    const streakScore = (s: number) => s < 2 ? 0 : [0, 0, 2, 5, 8, 10, 12, 15][Math.min(s, 7)]
-    return { streak: maxStreak, added: streakScore(maxStreak) }
+
+    const streakScoreMap = [0, 0, 2, 5, 8, 10, 12, 15]
+    const s = Math.min(streak, 7)
+    return { streak, added: streakScoreMap[s] }
   }
 
   async function handleCheckin() {
@@ -116,7 +130,7 @@ export function HealthCheckinPage() {
 
     const { error: err } = await supabase.from('health_checkins').upsert({
       profile_id: user.id,
-      checkin_date: new Date().toISOString().split('T')[0],
+      checkin_date: localDateStr(),
       sport_type: '乒乓球',
       duration_minutes: duration,
     }, { onConflict: 'profile_id, checkin_date' })
@@ -129,10 +143,7 @@ export function HealthCheckinPage() {
     const durScore = calcDurationScore(duration)
     const daysAdded = +(40 / 7).toFixed(1)
     const streakInfo = calcStreakContribution(thisWeek, duration)
-    const streakAdded = streakInfo.streak >= 2
-      ? [0, 2, 5, 8, 10, 12, 15][Math.min(streakInfo.streak, 7)] -
-        (streakInfo.streak > 2 ? [0, 2, 5, 8, 10, 12, 15][Math.min(streakInfo.streak - 1, 7)] : 0)
-      : 0
+    const streakAdded = streakInfo.streak >= 2 ? streakInfo.added : 0
 
     setTodayResult({ durScore, daysAdded, streakAdded, total: +(durScore + daysAdded + streakAdded).toFixed(1) })
     setSuccess('✅ 今日打卡成功！')
@@ -155,7 +166,7 @@ export function HealthCheckinPage() {
     const dateObj = new Date(ws)
     const weekEnd = new Date(dateObj)
     weekEnd.setDate(dateObj.getDate() + 6)
-    const weekEndStr = weekEnd.toISOString().split('T')[0]
+    const weekEndStr = localDateStr(weekEnd)
 
     const { data: checkins } = await supabase.from('health_checkins').select('*')
       .eq('profile_id', user.id).gte('checkin_date', ws).lte('checkin_date', weekEndStr)
@@ -219,6 +230,10 @@ export function HealthCheckinPage() {
   }
 
   const weekDays = ['一', '二', '三', '四', '五', '六', '日']
+
+  // 修正 getWeekStart 用的星期映射（getDay() 返回0=周日,1=周一...）
+  // 日历从周一开始，所以索引0=周一
+  const weekDayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
   if (loading) return <div className="text-center py-10 text-gray-400">加载中...</div>
 
@@ -303,7 +318,7 @@ export function HealthCheckinPage() {
               <span className="font-bold text-blue-600">+{todayResult.durScore}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">📅 天数贡献（1/7 周）</span>
+              <span className="text-gray-600">📅 天数贡献（2/7 天）</span>
               <span className="font-bold text-blue-600">+{todayResult.daysAdded}</span>
             </div>
             {todayResult.streakAdded > 0 && (
@@ -337,8 +352,8 @@ export function HealthCheckinPage() {
           {weekDays.map((d, i) => {
             const dateObj = new Date(getWeekStart(new Date()))
             dateObj.setDate(dateObj.getDate() + i)
-            const dateStr = dateObj.toISOString().split('T')[0]
-            const isToday = dateStr === new Date().toISOString().split('T')[0]
+            const dateStr = localDateStr(dateObj)
+            const isToday = dateStr === localDateStr()
             const checked = thisWeek.find(c => c.checkin_date === dateStr)
             return (
               <div key={i} className="text-center">
@@ -381,7 +396,7 @@ export function HealthCheckinPage() {
               const dateObj = new Date(ws)
               const weekEnd = new Date(dateObj)
               weekEnd.setDate(dateObj.getDate() + 6)
-              const weekEndStr = weekEnd.toISOString().split('T')[0]
+              const weekEndStr = localDateStr(weekEnd)
 
               const { data: checkins } = await supabase.from('health_checkins').select('*')
                 .eq('profile_id', user.id).gte('checkin_date', ws).lte('checkin_date', weekEndStr)

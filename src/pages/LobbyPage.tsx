@@ -4,6 +4,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import type { Announcement } from '../types'
 
+function localDateStr(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 interface FortuneResult {
   id: string
   content: string
@@ -24,7 +32,6 @@ interface NewsFlash {
 
 const features = [
   { title: '自由约球', path: '/matchmaking', icon: '🏓', color: 'bg-green-100 text-green-600' },
-  { title: '创建比赛', path: '/matches/new', icon: '⚔️', color: 'bg-orange-100 text-orange-600' },
   { title: '赛事中心', path: '/tournaments', icon: '🏆', color: 'bg-yellow-100 text-yellow-600' },
   { title: '实时排名', path: '/rankings', icon: '📊', color: 'bg-blue-100 text-blue-600' },
   { title: '聊天大厅', path: '/chat', icon: '💬', color: 'bg-indigo-100 text-indigo-600' },
@@ -68,7 +75,7 @@ export function LobbyPage() {
 
   async function loadFortune() {
     if (!profile) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateStr()
     const { data: existing } = await supabase
       .from('user_fortunes').select('fortune_id').eq('profile_id', profile.id).eq('drawn_date', today).maybeSingle()
     if (existing) {
@@ -380,7 +387,7 @@ export function LobbyPage() {
                         className={'text-xs font-medium transition ' + ((f.liked_by || []).includes(profile?.id || '') ? 'text-red-500' : 'text-gray-400 hover:text-red-400')}>
                         {(f.liked_by || []).includes(profile?.id || '') ? '❤️' : '🤍'} {(f.liked_by || []).length > 0 && (f.liked_by || []).length}
                       </button>
-                      {isAdmin && (
+                      {(isAdmin || profile?.id === f.profile_id) && (
                         <button onClick={() => deleteFlash(f.id)}
                           className="text-[10px] text-red-400 hover:text-red-600">删除</button>
                       )}

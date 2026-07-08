@@ -2,6 +2,10 @@ export interface Profile {
   id: string
   username: string
   nickname: string
+  bio?: string | null
+  blade?: string | null
+  forehand_rubber?: string | null
+  backhand_rubber?: string | null
   elo_score: number
   created_at: string
 }
@@ -47,6 +51,7 @@ export interface Tournament {
   status: 'draft' | 'in_progress' | 'completed' | 'cancelled'
   description: string | null
   max_players: number | null
+  start_time: string | null
   created_by: string
   created_at: string
   updated_at: string

@@ -171,6 +171,21 @@ export function ChatPage() {
     if (!error) setInput('')
   }
 
+  async function handleDeleteMessage(msgId: string, senderId: string, createdAt: string) {
+    if (!profile) return
+    const isAdmin = profile.username === 'guanliyuan'
+    const isOwner = senderId === profile.id
+    const diffMs = Date.now() - new Date(createdAt).getTime()
+    const canDelete = isAdmin || (isOwner && diffMs < 2 * 60 * 1000)
+    if (!canDelete) {
+      if (isOwner) { alert('发送超过2分钟，无法撤回') }
+      return
+    }
+    if (!window.confirm('确定撤回这条消息吗？')) return
+    await supabase.from('messages').delete().eq('id', msgId)
+    loadFresh()
+  }
+
   const totalPrivateUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
 
   return (
@@ -230,7 +245,12 @@ export function ChatPage() {
                     {tab === 'global' ? '暂时没有消息' : '开始聊天吧！'}
                   </p>
                 ) : (
-                  messages.map((m: any) => (
+                  messages.map((m: any) => {
+                    const isAdmin = profile?.username === 'guanliyuan'
+                    const isOwner = m.sender_id === profile?.id
+                    const diffMs = Date.now() - new Date(m.created_at).getTime()
+                    const showDelete = isAdmin || (isOwner && diffMs < 2 * 60 * 1000)
+                    return (
                     <div key={m.id} className={`flex ${m.sender_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${
                         m.sender_id === profile?.id ? 'bg-blue-600 text-white' : 'bg-gray-100'
@@ -239,12 +259,21 @@ export function ChatPage() {
                           <p className="text-xs opacity-70 mb-0.5">{m.sender?.nickname || '?'}</p>
                         )}
                         <p>{m.content}</p>
-                        <p className={`text-xs mt-0.5 ${m.sender_id === profile?.id ? 'text-blue-200' : 'text-gray-400'}`}>
-                          {new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <p className={`text-xs ${m.sender_id === profile?.id ? 'text-blue-200' : 'text-gray-400'}`}>
+                            {new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {showDelete && (
+                            <button onClick={() => handleDeleteMessage(m.id, m.sender_id, m.created_at)}
+                              className="text-xs text-red-400 hover:text-red-600 leading-none">
+                              撤回
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ))
+                    )
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>

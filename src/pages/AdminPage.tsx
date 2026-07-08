@@ -153,6 +153,17 @@ export function AdminPage() {
     setSuccess('已清理 ' + r.deleted_posts + ' 条过期约球、' + r.deleted_responses + ' 条响应')
   }
 
+  async function handleCleanupAllMatchmaking() {
+    setError(''); setSuccess('')
+    const ok = window.confirm('确定要清理所有约球吗？此操作不可撤销！')
+    if (!ok) return
+    const { data, error: err } = await supabase.rpc('cleanup_all_matchmaking')
+    if (err) { setError(err.message); return }
+    const r = data as any
+    if (r.error) { setError(r.error); return }
+    setSuccess('已清除所有约球：' + r.deleted_posts + ' 条帖子、' + r.deleted_responses + ' 条响应')
+  }
+
   // ========== 运势管理 ==========
   async function loadFortuneItems() {
     setFortuneLoading(true)
@@ -469,14 +480,27 @@ export function AdminPage() {
       )}
 
       {tab === 'matchmaking' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">过期约球清理</div>
-          <div className="p-6 text-center space-y-4">
-            <p className="text-sm text-gray-600">清理所有约球时间超过1天的帖子（不管有没有约上）</p>
-            <button onClick={handleCleanupMatchmaking}
-              className="px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">
-              一键清理过期约球
-            </button>
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">过期约球清理</div>
+            <div className="p-6 text-center space-y-4">
+              <p className="text-sm text-gray-600">清理所有过期的约球帖子（结束时间已过，或开始时间超过1天）</p>
+              <button onClick={handleCleanupMatchmaking}
+                className="px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">
+                一键清理过期约球
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-red-50 font-medium text-sm text-red-700">⚠️ 危险操作</div>
+            <div className="p-6 text-center space-y-4">
+              <p className="text-sm text-gray-600">清除所有约球帖子及响应记录，<span className="text-red-500 font-medium">不可撤销！</span></p>
+              <button onClick={handleCleanupAllMatchmaking}
+                className="px-6 py-3 bg-gray-800 text-white rounded-xl text-sm font-medium hover:bg-black">
+                一键清理所有约球
+              </button>
+            </div>
           </div>
         </div>
       )}

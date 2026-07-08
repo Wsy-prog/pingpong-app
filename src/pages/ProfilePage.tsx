@@ -14,7 +14,13 @@ export function ProfilePage() {
   const [eloHistory, setEloHistory] = useState<EloHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
+  const [editingBio, setEditingBio] = useState(false)
+  const [editingBlade, setEditingBlade] = useState(false)
   const [nickname, setNickname] = useState('')
+  const [bio, setBio] = useState('')
+  const [blade, setBlade] = useState('')
+  const [forehandRubber, setForehandRubber] = useState('')
+  const [backhandRubber, setBackhandRubber] = useState('')
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [oldPw, setOldPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -30,7 +36,7 @@ export function ProfilePage() {
 
   async function loadProfile(userId: string) {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (p) { setTargetProfile(p); setNickname(p.nickname) }
+    if (p) { setTargetProfile(p); setNickname(p.nickname); setBio(p.bio || ''); setBlade(p.blade || ''); setForehandRubber(p.forehand_rubber || ''); setBackhandRubber(p.backhand_rubber || '') }
 
     const { data: m } = await supabase
       .from('matches')
@@ -61,6 +67,20 @@ export function ProfilePage() {
     window.location.reload()
   }
 
+  async function saveBio() {
+    if (!me) return
+    await supabase.from('profiles').update({ bio }).eq('id', me.id)
+    setEditingBio(false)
+    setTargetProfile(prev => prev ? { ...prev, bio } : prev)
+  }
+
+  async function saveBlade() {
+    if (!me) return
+    await supabase.from('profiles').update({ blade, forehand_rubber: forehandRubber, backhand_rubber: backhandRubber }).eq('id', me.id)
+    setEditingBlade(false)
+    setTargetProfile(prev => prev ? { ...prev, blade, forehand_rubber: forehandRubber, backhand_rubber: backhandRubber } : prev)
+  }
+
   async function handleChangePassword() {
     setPwError('')
     if (!newPw || newPw.length < 4) { setPwError('新密码至少4位'); return }
@@ -79,6 +99,11 @@ export function ProfilePage() {
 
   const wins = matches.filter(m => m.winner_name === targetProfile?.nickname).length
   const total = matches.filter(m => m.status === 'completed').length
+
+  // 最近10场（含正在进行中的比赛）
+  const recentMatches = matches.slice(0, 10)
+  const recentWins = recentMatches.filter(m => m.winner_name === targetProfile?.nickname).length
+  const recentMatchCount = recentMatches.length
 
   if (loading) return <div className="text-center py-10 text-gray-400">加载中...</div>
   if (!targetProfile) return <div className="text-center py-10 text-gray-400">用户不存在</div>
@@ -119,20 +144,143 @@ export function ProfilePage() {
         </div>
       </div>
 
+      {/* 个人宣言 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-bold text-sm">📝 个人宣言</h2>
+          {isMe && !editingBio && (
+            <button onClick={() => setEditingBio(true)}
+              className="text-xs text-blue-600 hover:underline">
+              {bio ? '编辑' : '添加'}
+            </button>
+          )}
+        </div>
+        {editingBio ? (
+          <div className="space-y-2">
+            <textarea value={bio} onChange={e => setBio(e.target.value)}
+              placeholder="写一句你的个人宣言..."
+              rows={3} maxLength={200}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="flex gap-2">
+              <button onClick={saveBio}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">保存</button>
+              <button onClick={() => { setEditingBio(false); setBio(targetProfile.bio || '') }}
+                className="px-3 py-1.5 border rounded-lg text-xs text-gray-600 hover:bg-gray-50">取消</button>
+            </div>
+          </div>
+        ) : bio ? (
+          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{bio}</p>
+        ) : (
+          <p className="text-sm text-gray-400 italic">暂无宣言</p>
+        )}
+      </div>
+
       {/* 数据概览 */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-blue-600">{targetProfile.elo_score}</p>
-          <p className="text-xs text-gray-400 mt-1">ELO 积分</p>
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <p className="text-lg font-bold text-blue-600">{targetProfile.elo_score}</p>
+          <p className="text-xs text-gray-400 mt-0.5">ELO 积分</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-green-600">{wins}</p>
-          <p className="text-xs text-gray-400 mt-1">胜场</p>
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <p className="text-lg font-bold text-green-600">{wins}</p>
+          <p className="text-xs text-gray-400 mt-0.5">胜场</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-gray-600">{total}</p>
-          <p className="text-xs text-gray-400 mt-1">总场数</p>
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <p className="text-lg font-bold text-gray-600">{total}</p>
+          <p className="text-xs text-gray-400 mt-0.5">总场数</p>
         </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+          <p className={`text-lg font-bold ${total > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+            {total > 0 ? Math.round(wins / total * 100) + '%' : '—'}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">胜率</p>
+        </div>
+      </div>
+
+      {/* 最近10场胜率 */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-sm">📊 最近10场</h2>
+          <p className={`text-lg font-bold ${recentWins > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+            {recentMatchCount > 0 ? Math.round(recentWins / recentMatchCount * 100) + '%' : '—'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 mt-2">
+          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-400 to-purple-500 rounded-full transition-all"
+              style={{ width: recentMatchCount > 0 ? (recentWins / recentMatchCount * 100) + '%' : '0%' }} />
+          </div>
+          <span className="text-xs text-gray-400 ml-2">{recentWins}胜/{recentMatchCount - recentWins}负</span>
+        </div>
+      </div>
+
+      {/* 球拍配置 */}
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold text-sm">🏓 球拍配置</h2>
+          {isMe && !editingBlade && (
+            <button onClick={() => setEditingBlade(true)}
+              className="text-xs text-blue-600 hover:underline">
+              {blade || forehandRubber || backhandRubber ? '编辑' : '添加'}
+            </button>
+          )}
+        </div>
+        {editingBlade ? (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">底板</label>
+              <input value={blade} onChange={e => setBlade(e.target.value)}
+                placeholder="如：蝴蝶 Viscaria"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">正手胶皮</label>
+              <input value={forehandRubber} onChange={e => setForehandRubber(e.target.value)}
+                placeholder="如：狂飙3 蓝省"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">反手胶皮</label>
+              <input value={backhandRubber} onChange={e => setBackhandRubber(e.target.value)}
+                placeholder="如：Tenergy 05 FX"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveBlade}
+                className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">保存</button>
+              <button onClick={() => {
+                setEditingBlade(false)
+                setBlade(targetProfile.blade || '')
+                setForehandRubber(targetProfile.forehand_rubber || '')
+                setBackhandRubber(targetProfile.backhand_rubber || '')
+              }}
+                className="px-4 py-1.5 border rounded-lg text-xs text-gray-600 hover:bg-gray-50">取消</button>
+            </div>
+          </div>
+        ) : blade || forehandRubber || backhandRubber ? (
+          <div className="space-y-2">
+            {blade && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-14 shrink-0">底板</span>
+                <span className="text-sm font-medium">{blade}</span>
+              </div>
+            )}
+            {forehandRubber && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-14 shrink-0">正手</span>
+                <span className="text-sm"><span className="text-red-500">●</span> {forehandRubber}</span>
+              </div>
+            )}
+            {backhandRubber && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-14 shrink-0">反手</span>
+                <span className="text-sm"><span className="text-blue-500">●</span> {backhandRubber}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 italic">未设置球拍配置</p>
+        )}
       </div>
 
       {/* 积分变动历史 */}
@@ -153,41 +301,6 @@ export function ProfilePage() {
           </div>
         </div>
       )}
-
-      {/* 比赛记录 */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">比赛记录</div>
-        {matches.length === 0 ? (
-          <p className="text-center text-gray-400 py-6 text-sm">暂无比赛记录</p>
-        ) : (
-          <div className="divide-y">
-            {matches.map(m => {
-              const isWinner = m.winner_name === targetProfile.nickname
-              return (
-                <Link key={m.id} to={`/matches/${m.id}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{m.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {new Date(m.created_at).toLocaleDateString('zh-CN')}
-                      {m.rated && ' · 积分赛'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    {m.status === 'completed' ? (
-                      <span className={`text-xs font-medium ${isWinner ? 'text-green-600' : 'text-red-400'}`}>
-                        {isWinner ? '胜' : '负'}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">{m.status === 'in_progress' ? '进行中' : '未开始'}</span>
-                    )}
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        )}
-      </div>
 
       {/* 修改密码弹窗 */}
       {showPasswordModal && (
