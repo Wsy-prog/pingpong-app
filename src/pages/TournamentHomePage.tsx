@@ -143,13 +143,6 @@ export function TournamentHomePage() {
 
   async function cancelRegistration(tournamentId: string) {
     if (!profile) return
-    const t = [...ongoingTournaments, ...historyTournaments].find(o => o.id === tournamentId)
-    if (!t) return
-    const cancelCheck = canCancel(t)
-    if (!cancelCheck.ok) {
-      alert(cancelCheck.reason)
-      return
-    }
     if (!window.confirm('确定取消报名吗？')) return
     setJoining(tournamentId)
     const { error } = await supabase
@@ -163,6 +156,8 @@ export function TournamentHomePage() {
       setOngoingTournaments(prev => prev.map(o =>
         o.id === tournamentId ? { ...o, player_count: Math.max(0, o.player_count - 1), joined: false } : o
       ))
+      loadMyTournaments()
+      loadAllTournaments()
     }
     setJoining(null)
   }
@@ -239,19 +234,14 @@ export function TournamentHomePage() {
                   ✓ 已报名
                 </span>
                 {showCancelButton(t) && (
-                  <button onClick={(e) => { e.preventDefault(); cancelRegistration(t.id) }}
-                    disabled={joining === t.id}
-                    className="text-xs text-red-500 hover:text-red-700 underline">
-                    {joining === t.id ? '...' : '取消报名'}
-                  </button>
-                )}
-                {!showCancelButton(t) && t.status !== 'in_progress' && t.start_time && (
-                  <span className="text-[10px] text-gray-400 text-center leading-tight mt-1">
-                    距开赛不足3h<br />无法取消
-                  </span>
-                )}
-              </div>
-            ) : isFull ? (
+                <button onClick={(e) => { e.preventDefault(); cancelRegistration(t.id) }}
+                  disabled={joining === t.id}
+                  className="text-xs text-red-500 hover:text-red-700 underline">
+                  {joining === t.id ? '...' : '取消报名'}
+                </button>
+              )}
+            </div>
+          ) : isFull ? (
               <span className="px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-xs font-medium">已满员</span>
             ) : (
               <button onClick={(e) => { e.preventDefault(); joinTournament(t.id) }}
@@ -366,16 +356,11 @@ export function TournamentHomePage() {
                           <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium whitespace-nowrap">
                             ✓ 已报名
                           </span>
-                          {showCancelButton(t as TournamentWithCount) && (
-                            <button onClick={() => cancelRegistration(t.id)}
+                          {t.status === 'draft' && (
+                            <button onClick={(e) => { e.preventDefault(); cancelRegistration(t.id) }}
                               className="block mt-1 text-xs text-red-500 hover:text-red-700 underline mx-auto">
                               取消报名
                             </button>
-                          )}
-                          {!showCancelButton(t as TournamentWithCount) && t.status !== 'in_progress' && t.start_time && (
-                            <span className="text-[10px] text-gray-400 text-center leading-tight mt-1 block">
-                              距开赛不足3h<br />无法取消
-                            </span>
                           )}
                         </div>
                       </div>
