@@ -2,6 +2,7 @@ import { registerEngine, roundRobinEngine, knockoutEngine, groupKnockoutEngine }
 import { fun100IndividualEngine, fun100TeamEngine } from './tournament/fun-engines';
 import { blindDoublesEngine } from './tournament/blind-doubles';
 import { eloHandicapEngine } from './tournament/elo-handicap';
+import { arenaEngine } from './tournament/arena';
 
 export function initEngines() {
   registerEngine(roundRobinEngine);
@@ -11,4 +12,5 @@ export function initEngines() {
   registerEngine(fun100TeamEngine);
   registerEngine(blindDoublesEngine);
   registerEngine(eloHandicapEngine);
+  registerEngine(arenaEngine);
 }
