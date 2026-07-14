@@ -19,6 +19,7 @@ export function MatchDetailPage() {
   const [inputP2, setInputP2] = useState('')
   // 从 tournament config 获取 sets_to_win
   const [tournamentConfig, setTournamentConfig] = useState<any>(null)
+  const [tournamentFormat, setTournamentFormat] = useState<string>('')
 
   useEffect(() => {
     if (!id) return
@@ -31,8 +32,8 @@ export function MatchDetailPage() {
     if (m) {
       setMatch(m)
       if (m.tournament_id) {
-        const { data: t } = await supabase.from('tournaments').select('config').eq('id', m.tournament_id).single()
-        if (t) setTournamentConfig(t.config)
+        const { data: t } = await supabase.from('tournaments').select('config, format').eq('id', m.tournament_id).single()
+        if (t) { setTournamentConfig(t.config); setTournamentFormat(t.format) }
       }
     }
     setLoading(false)
@@ -132,13 +133,21 @@ export function MatchDetailPage() {
     loadMatch()
   }
 
+  function getEloParams(format: string | undefined, config: any): { kFactor?: number } {
+    if (format === 'fun_elo_handicap') return { kFactor: 16 };  // 让分赛K折半
+    if (format === 'fun_blind_doubles') return { kFactor: 20 };  // 双打冠军K
+    if (format === 'fun_arena') return { kFactor: 25 };          // 擂台赛K
+    return {};
+  }
+
   async function handleSettleElo() {
     if (!match || !match.player1_id || !match.player2_id || !match.winner_name) return
     if (!confirm('确定要结算 ELO 积分吗？此操作不可撤销。')) return
     setError('')
     try {
       const winner = match.winner_name === match.player1_name ? 'player1' : 'player2'
-      await settleMatchElo(supabase, match.id, match.player1_id, match.player2_id, winner)
+      const { kFactor } = getEloParams(tournamentFormat, tournamentConfig)
+      await settleMatchElo(supabase, match.id, match.player1_id, match.player2_id, winner, kFactor)
       loadMatch()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '结算失败')

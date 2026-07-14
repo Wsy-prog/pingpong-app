@@ -18,7 +18,8 @@ export function expectedScore(ra: number, rb: number): number {
 export function calculateElo(
   ra: number,
   rb: number,
-  winner: 'player1' | 'player2'
+  winner: 'player1' | 'player2',
+  kFactor: number = K_FACTOR
 ): {
   newRa: number;
   newRb: number;
@@ -30,8 +31,8 @@ export function calculateElo(
   const sa = winner === 'player1' ? 1 : 0;
   const sb = winner === 'player2' ? 1 : 0;
 
-  const newRa = Math.round(ra + K_FACTOR * (sa - ea));
-  const newRb = Math.round(rb + K_FACTOR * (sb - eb));
+  const newRa = Math.round(ra + kFactor * (sa - ea));
+  const newRb = Math.round(rb + kFactor * (sb - eb));
 
   return {
     newRa,
@@ -50,7 +51,8 @@ export async function settleMatchElo(
   matchId: string,
   player1Id: string,
   player2Id: string,
-  winner: 'player1' | 'player2'
+  winner: 'player1' | 'player2',
+  kFactor: number = K_FACTOR
 ) {
   const { data: p1 } = await supabase
     .from('profiles')
@@ -65,7 +67,7 @@ export async function settleMatchElo(
 
   if (!p1 || !p2) throw new Error('选手不存在');
 
-  const result = calculateElo(p1.elo_score, p2.elo_score, winner);
+  const result = calculateElo(p1.elo_score, p2.elo_score, winner, kFactor);
   const winnerId = winner === 'player1' ? player1Id : player2Id;
   const loserId = winner === 'player1' ? player2Id : player1Id;
 
