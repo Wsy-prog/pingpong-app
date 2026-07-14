@@ -45,6 +45,10 @@ export function MatchDetailPage() {
   const isFunMode = !!tournamentConfig?.target_score
   const targetScore: number = tournamentConfig?.target_score || 100
   const isTeamFun = isFunMode && tournamentConfig?.mode === 'team_relay'
+  const isFunHandicap = tournamentConfig?.target_score === 21 && !!tournamentConfig?.handicap_score
+  const isFunArena = !!tournamentConfig?.arena_champion_name
+  const handicapScore: number = tournamentConfig?.handicap_score || 0
+  const handicapPlayerId: string = tournamentConfig?.handicap_player_id || ''
   const stages: any[] = tournamentConfig?.stages || []
   const setsToWin: number = tournamentConfig?.sets_to_win || 2
 
@@ -59,9 +63,9 @@ export function MatchDetailPage() {
     if (isNaN(p1) || isNaN(p2)) return null
 
     if (isFunMode) {
-      // 百分制：任一≥targetScore且领先→获胜
-      if (p1 >= targetScore && p1 > p2) return 'player1'
-      if (p2 >= targetScore && p2 > p1) return 'player2'
+      // 趣味模式：达到目标分且领先≥2分获胜
+      if (p1 >= targetScore && p1 - p2 >= 2) return 'player1'
+      if (p2 >= targetScore && p2 - p1 >= 2) return 'player2'
       return null
     }
 
@@ -82,7 +86,7 @@ export function MatchDetailPage() {
     if (!autoWinner) {
       if (p1 === p2) { setError(isFunMode ? '分数不能相同' : '局分不能相同'); return }
       if (isFunMode) {
-        setError(`先达到 ${targetScore} 分且领先对手者胜，当前 ${Math.max(p1, p2)}:${Math.min(p1, p2)} 不满足`);
+        setError(`先达到 ${targetScore} 分且领先≥2分者胜，当前 ${Math.max(p1, p2)}:${Math.min(p1, p2)} 不满足`);
       } else {
         setError(`胜者必须赢得 ${setsToWin} 局，当前为 ${Math.max(p1, p2)}:${Math.min(p1, p2)}，不合法`);
       }
@@ -157,6 +161,9 @@ export function MatchDetailPage() {
             {isFunMode ? `百分制（先得${targetScore}分胜）` : `${setsToWin * 2 - 1}局${setsToWin}胜`}
           </span>
           {match.rated && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">积分已结算</span>}
+          {isFunArena && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">擂台挑战赛</span>
+          )}
         </div>
       </div>
 
@@ -180,6 +187,20 @@ export function MatchDetailPage() {
         {match.status === 'completed' && (
           <div className="px-4 py-2 bg-blue-50 border-t text-sm font-semibold text-center">
             🏆 {match.winner_name} 胜（{p1Final}:{p2Final}{isFunMode ? ` 先得${targetScore}分` : ''}）
+          </div>
+        )}
+        {/* ELO让分提示 */}
+        {isFunHandicap && handicapScore > 0 && (
+          <div className="px-4 py-2 bg-yellow-50 border-t text-xs text-center text-yellow-700">
+            ⚡ 让分：{handicapPlayerId === match?.player1_id ? match?.player1_name : match?.player2_name} 从 {handicapScore} 分开始
+          </div>
+        )}
+        {/* 擂台赛进度 */}
+        {isFunArena && tournamentConfig?.challenge_order && (
+          <div className="px-4 py-2 bg-purple-50 border-t text-xs text-center">
+            👑 当前擂主：<strong>{tournamentConfig.arena_champion_name}</strong>
+            {' '}| 连胜：{tournamentConfig.arena_streak || 0}场
+            {' '}| 挑战：{match ? ((tournamentConfig.challenge_order as any[]).filter((c: any) => c.order <= match.round!).length || match.round || '0') : '0'} / {(tournamentConfig.challenge_order as any[]).length} 场
           </div>
         )}
       </div>
@@ -297,7 +318,7 @@ export function MatchDetailPage() {
                     {parseInt(inputP1) === parseInt(inputP2)
                       ? (isFunMode ? '分数不能相同' : '局分不能相同')
                       : isFunMode
-                        ? `先达到 ${targetScore} 分且领先对手者胜`
+                        ? `先达到 ${targetScore} 分且领先≥2分者胜`
                         : `无效比分，胜者须赢得 ${setsToWin} 局`}
                   </p>
                 </div>
