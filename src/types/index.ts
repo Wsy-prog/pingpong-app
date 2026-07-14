@@ -45,7 +45,7 @@ export interface Set {
 export interface Tournament {
   id: string
   name: string
-  format: 'single_match' | 'round_robin' | 'knockout' | 'group_knockout' | 'custom_score' | 'fun_100_individual' | 'fun_100_team'
+  format: 'single_match' | 'round_robin' | 'knockout' | 'group_knockout' | 'custom_score' | 'fun_100_individual' | 'fun_100_team' | 'fun_elo_handicap' | 'fun_blind_doubles' | 'fun_arena'
   category: 'singles' | 'doubles' | 'team' | 'fun'
   config: Record<string, unknown>
   status: 'draft' | 'in_progress' | 'completed' | 'cancelled'

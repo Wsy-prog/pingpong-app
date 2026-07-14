@@ -5,7 +5,10 @@ export type TournamentFormat =
   | 'group_knockout'
   | 'custom_score'
   | 'fun_100_individual'
-  | 'fun_100_team';
+  | 'fun_100_team'
+  | 'fun_elo_handicap'
+  | 'fun_blind_doubles'
+  | 'fun_arena';
 
 export interface TournamentConfig {
   sets_to_win: number;         // 每场比赛赢几局获胜（如 3局2胜）
@@ -14,6 +17,19 @@ export interface TournamentConfig {
   third_place_match?: boolean;  // 淘汰赛是否进行三四名决赛
   groups?: number;              // 混合赛小组数
   advance_per_group?: number;   // 混合赛每组晋级人数
+  // 趣味赛事配置
+  target_score?: number;              // 百分制目标分
+  handicap_score?: number;            // ELO让分赛：低分者领先分数
+  handicap_player_id?: string;        // ELO让分赛：获得让分的选手ID
+  teams?: { name: string; player_ids: string[] }[];  // 盲盒双打赛：随机配对结果
+  challenge_order?: { challenger_name: string; order: number }[];  // 擂台赛：挑战顺序
+  arena_champion_name?: string;       // 擂台赛：当前擂主
+  arena_streak?: number;              // 擂台赛：连胜数
+  mode?: string;                      // 模式标记（如 'team_relay'）
+  team1?: any;                        // 百分团体赛队伍1
+  team2?: any;                        // 百分团体赛队伍2
+  stages?: any[];                     // 团体赛阶段
+  current_stage?: number;             // 团体赛当前阶段
 }
 
 export interface Player {
