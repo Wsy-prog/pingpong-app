@@ -17,7 +17,7 @@ export function TournamentCreatePage() {
   const [startTime, setStartTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [showRules, setShowRules] = useState('') // '' | 'individual' | 'team'
+  const [showRules, setShowRules] = useState<'individual' | 'team' | 'elo_handicap' | 'blind_doubles' | 'arena' | ''>('')
 
   const engines = listEngines()
 
@@ -39,12 +39,28 @@ export function TournamentCreatePage() {
     setSubmitting(true)
     setError('')
 
-    const config = category === 'fun'
-      ? { target_score: 100 }
+    const config: Record<string, unknown> = category === 'fun'
+      ? (format === 'fun_elo_handicap'
+          ? { target_score: 21, handicap_score: 0 }
+          : format === 'fun_blind_doubles'
+          ? { sets_to_win: setsToWin }
+          : format === 'fun_arena'
+          ? { sets_to_win: setsToWin }
+          : { target_score: 100 })
       : { sets_to_win: setsToWin }
 
     const startISO = startTime ? new Date(startTime).toISOString() : null
-    const minP = category === 'singles' ? 2 : category === 'doubles' ? 4 : category === 'fun' ? (format === 'fun_100_individual' ? 2 : 10) : 6
+    const minP = category === 'singles' ? 2
+      : category === 'doubles' ? 4
+      : category === 'fun' ? (
+        format === 'fun_100_individual' ? 2
+        : format === 'fun_100_team' ? 10
+        : format === 'fun_elo_handicap' ? 2
+        : format === 'fun_blind_doubles' ? 4
+        : format === 'fun_arena' ? 3
+        : 2
+      )
+      : 6
     const finalMaxPlayers = Math.max(minP, parseInt(maxPlayersStr) || minP)
 
     const { data, error: err } = await supabase
@@ -109,7 +125,7 @@ export function TournamentCreatePage() {
               <p className="font-medium text-xs">👥 团体</p>
               <p className="text-[10px] text-gray-400 mt-0.5">≥6人</p>
             </button>
-            <button type="button" onClick={() => { setCategory('fun'); setMaxPlayersStr('2'); setFormat('fun_100_individual') }}
+            <button type="button" onClick={() => { setCategory('fun'); setMaxPlayersStr('2'); setFormat('fun_elo_handicap') }}
               className={`p-2.5 rounded-lg border text-left transition ${
                 category === 'fun'
                   ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -127,7 +143,16 @@ export function TournamentCreatePage() {
             {engines.filter(e => category === 'fun' ? e.type.startsWith('fun_') : !e.type.startsWith('fun_')).map(e => {
               const isFunFormat = e.type.startsWith('fun_')
               return (
-              <button key={e.type} type="button" onClick={() => { setFormat(e.type); if (category === 'fun') setMaxPlayersStr(e.type === 'fun_100_individual' ? '2' : '10') }}
+              <button key={e.type} type="button" onClick={() => {
+                  setFormat(e.type);
+                  if (category === 'fun') {
+                    if (e.type === 'fun_elo_handicap') setMaxPlayersStr('2');
+                    else if (e.type === 'fun_blind_doubles') setMaxPlayersStr('4');
+                    else if (e.type === 'fun_arena') setMaxPlayersStr('3');
+                    else if (e.type === 'fun_100_individual') setMaxPlayersStr('2');
+                    else if (e.type === 'fun_100_team') setMaxPlayersStr('10');
+                  }
+                }}
                 className={`p-3 rounded-lg border text-left transition relative ${
                   format === e.type
                     ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -135,7 +160,16 @@ export function TournamentCreatePage() {
                 }`}>
                 <p className="font-medium text-sm pr-5">{e.name}</p>
                 {isFunFormat && (
-                  <span onClick={(ev) => { ev.stopPropagation(); setShowRules(e.type === 'fun_100_individual' ? 'individual' : 'team') }}
+                  <span onClick={(ev) => {
+                    ev.stopPropagation();
+                    setShowRules(
+                      e.type === 'fun_100_individual' ? 'individual'
+                      : e.type === 'fun_elo_handicap' ? 'elo_handicap'
+                      : e.type === 'fun_blind_doubles' ? 'blind_doubles'
+                      : e.type === 'fun_arena' ? 'arena'
+                      : 'team'
+                    )
+                  }}
                     className="absolute top-2 right-2 w-4 h-4 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] font-bold hover:bg-blue-200 hover:text-blue-600 cursor-pointer"
                     title="查看规则">?</span>
                 )}
@@ -147,16 +181,33 @@ export function TournamentCreatePage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">参赛人数</label>
-            <input type="number" min={category === 'singles' ? 2 : category === 'doubles' ? 4 : category === 'fun' ? (format === 'fun_100_individual' ? 2 : 10) : 6} max={category === 'fun' ? (format === 'fun_100_individual' ? 2 : 10) : 128} value={maxPlayersStr}
+            <input type="number" min={category === 'singles' ? 2 : category === 'doubles' ? 4 : category === 'fun' ? (
+              format === 'fun_100_individual' ? 2
+              : format === 'fun_100_team' ? 10
+              : format === 'fun_elo_handicap' ? 2
+              : format === 'fun_blind_doubles' ? 4
+              : format === 'fun_arena' ? 3
+              : 2
+            ) : 6} max={category === 'fun' ? (
+              format === 'fun_100_individual' ? 2
+              : format === 'fun_100_team' ? 10
+              : format === 'fun_elo_handicap' ? 2
+              : format === 'fun_blind_doubles' ? 16
+              : format === 'fun_arena' ? 8
+              : 128
+            ) : 128} value={maxPlayersStr}
               onChange={e => setMaxPlayersStr(e.target.value)}
-              disabled={category === 'fun'}
+              disabled={category === 'fun' && format !== 'fun_blind_doubles' && format !== 'fun_arena'}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">每场胜局数</label>
             {category === 'fun' ? (
               <div className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500 text-sm">
-                百分制（先得100分胜）
+                {format === 'fun_elo_handicap' ? '21分制（领先2分胜）'
+                  : format === 'fun_blind_doubles' ? '三局两胜'
+                  : format === 'fun_arena' ? '三局两胜'
+                  : '百分制（先得100分胜）'}
               </div>
             ) : (
               <select value={setsToWin} onChange={e => setSetsToWin(parseInt(e.target.value))}
@@ -208,6 +259,46 @@ export function TournamentCreatePage() {
                     <li><strong>计分规则</strong>：采用正规乒乓球比赛规则，每两分换发球</li>
                     <li><strong>获胜条件</strong>：双方不设局数限制，持续比赛，<span className="text-orange-600 font-bold">先累计达到100分的一方获胜</span></li>
                     <li>比分不归零，全程累加至100分</li>
+                  </ul>
+                </div>
+              </>
+            ) : showRules === 'elo_handicap' ? (
+              <>
+                <h2 className="text-lg font-bold mb-4">🔢 ELO让分赛 — 规则</h2>
+                <div className="space-y-3 text-sm text-gray-700">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><strong>参赛人数</strong>：2人</li>
+                    <li><strong>让分规则</strong>：ELO高者让低者，每50分差让1分，最多让15分</li>
+                    <li><strong>起始比分</strong>：低分者从让分数开始，高分者从0开始</li>
+                    <li><strong>获胜条件</strong>：<span className="text-orange-600 font-bold">先得21分且领先≥2分者胜</span></li>
+                    <li><strong>ELO结算</strong>：胜方+16，负方-16（不受让分影响）</li>
+                  </ul>
+                </div>
+              </>
+            ) : showRules === 'blind_doubles' ? (
+              <>
+                <h2 className="text-lg font-bold mb-4">🎲 盲盒双打赛 — 规则</h2>
+                <div className="space-y-3 text-sm text-gray-700">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><strong>参赛人数</strong>：4的倍数，最少4人，最多16人</li>
+                    <li><strong>配对方式</strong>：<span className="text-orange-600 font-bold">随机抽签</span>，每2人组成一队搭档</li>
+                    <li><strong>赛制</strong>：4队→淘汰赛；≥6队→先小组循环后淘汰</li>
+                    <li><strong>比赛模式</strong>：双打（2v2），每场3局2胜</li>
+                    <li><strong>ELO结算</strong>：冠军搭档各+20，亚军各+10</li>
+                  </ul>
+                </div>
+              </>
+            ) : showRules === 'arena' ? (
+              <>
+                <h2 className="text-lg font-bold mb-4">👑 擂台挑战赛 — 规则</h2>
+                <div className="space-y-3 text-sm text-gray-700">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><strong>参赛人数</strong>：3~8人</li>
+                    <li><strong>守擂者</strong>：第1位报名者为初始擂主</li>
+                    <li><strong>挑战顺序</strong>：其余选手按ELO从低到高依次上场</li>
+                    <li><strong>守擂规则</strong>：擂主胜→继续守擂；擂主败→挑战者成为新擂主</li>
+                    <li><strong>比赛终点</strong>：<span className="text-orange-600 font-bold">全部挑战完毕，最终擂主为冠军</span></li>
+                    <li><strong>ELO结算</strong>：最终擂主+25；每连胜1场额外+5</li>
                   </ul>
                 </div>
               </>
