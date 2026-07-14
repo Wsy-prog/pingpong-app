@@ -65,6 +65,14 @@ export function TournamentDetailPage() {
       return standings.length > 0 ? standings[0].player_name : null
     }
 
+    if (t.format === 'fun_arena') {
+      if (t.status !== 'completed') return null
+      const completedMatches = matches.filter(m => m.status === 'completed')
+      if (completedMatches.length === 0) return null
+      const lastMatch = completedMatches[completedMatches.length - 1]
+      return lastMatch.winner_name || null
+    }
+
     return null
   })()
 
@@ -256,6 +264,28 @@ export function TournamentDetailPage() {
         )}
       </div>
 
+      {/* 擂台赛视图 */}
+      {tournament.format === 'fun_arena' && (
+        <ArenaView
+          matches={matches}
+          config={tournament.config as any}
+          players={players}
+        />
+      )}
+
+      {/* 盲盒双打配对结果 */}
+      {tournament.format === 'fun_blind_doubles' && (tournament.config as any)?.teams && (
+        <div className="bg-white rounded-lg shadow-sm p-4 space-y-2">
+          <h3 className="font-medium">🎲 随机配对结果</h3>
+          {((tournament.config as any).teams as any[]).map((team, i) => (
+            <div key={i} className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-sm">
+              <span className="text-blue-400 font-medium">#{i + 1}</span>
+              <span className="font-medium text-blue-700">{team.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 操作按钮 */}
       {tournament.status === 'draft' && (
         <Link to={`/tournaments/${id}/setup`}
@@ -264,8 +294,8 @@ export function TournamentDetailPage() {
         </Link>
       )}
 
-      {tournament.status === 'in_progress' && (tournament.format === 'knockout' || tournament.format === 'group_knockout') && (
-        <AdvanceRoundButton tournamentId={id!} matches={matches} tournament={tournament} onUpdated={loadTournament} />
+      {tournament.status === 'in_progress' && (tournament.format === 'knockout' || tournament.format === 'group_knockout' || tournament.format === 'fun_arena') && (
+        <AdvanceRoundButton tournamentId={id!} matches={matches} tournament={tournament} players={players} onUpdated={loadTournament} />
       )}
 
       {/* 结束赛事 */}
@@ -670,19 +700,34 @@ function findNextOpponent(currentUserName: string, matches: Match[], tournament:
   return null
 }
 
-function AdvanceRoundButton({ tournamentId, matches, tournament, onUpdated }: {
-  tournamentId: string; matches: Match[]; tournament: Tournament; onUpdated: () => void
+function AdvanceRoundButton({ tournamentId, matches, tournament, players, onUpdated }: {
+  tournamentId: string; matches: Match[]; tournament: Tournament; players: EnginePlayer[]; onUpdated: () => void
 }) {
   const engine = getEngine(tournament.format)
-  const canAdvance = engine.canProceed?.({ matches: matches as any, config: tournament.config as any })
+  const canAdvance = engine.canProceed?.({ matches: matches as any, config: tournament.config as any, players } as any)
 
   if (!canAdvance) return null
 
+  const isArena = tournament.format === 'fun_arena'
+
   const handleAdvance = async () => {
     const nextMatches = engine.getNextRound?.({
-      matches: matches as any, config: tournament.config as any, players: []
-    })
+      matches: matches as any, config: tournament.config as any, players
+    } as any)
     if (!nextMatches || nextMatches.length === 0) return
+
+    // Arena: update champion and streak before inserting next match
+    if (isArena) {
+      const lastCompleted = matches.filter(m => m.status === 'completed').slice(-1)[0]
+      if (lastCompleted) {
+        const currentChampion = (tournament.config as any).arena_champion_name
+        const newChampion = lastCompleted.winner_name
+        const streak = newChampion === currentChampion ? ((tournament.config as any).arena_streak || 0) + 1 : 0
+        await supabase.from('tournaments').update({
+          config: { ...tournament.config as any, arena_champion_name: newChampion, arena_streak: streak }
+        }).eq('id', tournamentId)
+      }
+    }
 
     const inserts = nextMatches.map(m => ({
       tournament_id: tournamentId,
@@ -701,8 +746,8 @@ function AdvanceRoundButton({ tournamentId, matches, tournament, onUpdated }: {
 
   return (
     <button onClick={handleAdvance}
-      className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
-      进入下一轮
+      className={`w-full py-3 text-white rounded-xl font-medium ${isArena ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}>
+      {isArena ? '生成下一场挑战赛' : '进入下一轮'}
     </button>
   )
 }
@@ -715,4 +760,55 @@ function groupMatches(matches: Match[]): Record<string, Match[]> {
     groups[key].push(m)
   }
   return groups
+}
+
+function ArenaView({ matches, config, players }: {
+  matches: Match[];
+  config: any;
+  players: { id: string; name: string; seed: number; group_name?: string }[];
+}) {
+  const challengeOrder: { challenger_name: string; order: number }[] = config?.challenge_order || [];
+  const champion = config?.arena_champion_name || players[0]?.name || '未知';
+  const completedCount = matches.filter(m => m.status === 'completed').length;
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
+      <h3 className="font-medium">👑 擂台挑战赛</h3>
+      <div className="bg-purple-50 rounded-lg p-3 text-center">
+        <p className="text-xs text-purple-500">当前擂主</p>
+        <p className="text-lg font-bold text-purple-800">{champion}</p>
+        <p className="text-xs text-purple-600">
+          连胜 {config?.arena_streak || 0} 场 | 挑战进度 {completedCount}/{challengeOrder.length}
+        </p>
+      </div>
+      {challengeOrder.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500 font-medium">挑战顺序：</p>
+          {challengeOrder.map((c, i) => {
+            const match = matches[i];
+            const isCompleted = match?.status === 'completed';
+            const isCurrent = !isCompleted && i === completedCount;
+            return (
+              <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
+                isCompleted ? 'bg-gray-50' : isCurrent ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 opacity-50'
+              }`}>
+                <span>
+                  <span className="text-gray-400 mr-2">#{c.order}</span>
+                  {c.challenger_name}
+                </span>
+                {isCompleted && (
+                  <span className={match.winner_name === c.challenger_name ? 'text-green-600 font-medium' : 'text-red-400'}>
+                    {match.winner_name === c.challenger_name ? '挑战成功🏆' : '挑战失败'}
+                  </span>
+                )}
+                {isCurrent && (
+                  <span className="text-yellow-600 text-xs">即将上场</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
