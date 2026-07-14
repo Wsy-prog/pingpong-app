@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { UtilityTool } from '../components/utility/UtilityTool'
+import { Scoreboard } from '../components/utility/Scoreboard'
 import type { Announcement } from '../types'
 
 function localDateStr(): string {
@@ -288,6 +290,20 @@ export function LobbyPage() {
           </div>
           <p className="font-medium text-sm">个人中心</p>
         </Link>
+      </div>
+
+      {/* 实用工具 */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b">
+          <h2 className="font-bold flex items-center gap-2">
+            🧰 实用工具
+          </h2>
+        </div>
+        <div>
+          <UtilityTool title="🏓 记分牌" defaultOpen>
+            <Scoreboard />
+          </UtilityTool>
+        </div>
       </div>
 
       {/* 乒协资讯 */}
