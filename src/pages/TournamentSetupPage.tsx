@@ -103,7 +103,7 @@ export function TournamentSetupPage() {
     if (!tournament || !id || !profile) { setError('请先登录'); return }
 
     // 最低人数验证
-    const minPlayers = tournament.category === 'singles' ? 2 : tournament.category === 'doubles' ? 4 : 6
+    const minPlayers = tournament.category === 'singles' ? 2 : tournament.category === 'doubles' ? 4 : tournament.category === 'fun' ? (tournament.format === 'fun_100_individual' ? 2 : tournament.format === 'fun_100_team' ? 10 : tournament.format === 'fun_elo_handicap' ? 2 : tournament.format === 'fun_blind_doubles' ? 4 : tournament.format === 'fun_arena' ? 3 : 2) : 6
     if (players.length < minPlayers) {
       setError(`${tournament.category === 'singles' ? '单人赛' : tournament.category === 'doubles' ? '双打' : '团体赛'}至少需要 ${minPlayers} 名选手`)
       return
@@ -139,6 +139,43 @@ export function TournamentSetupPage() {
           p1Name = players[0].name
           p2Name = players[1].name
           extraConfig = { target_score: 100 }
+        } else if (tournament.format === 'fun_elo_handicap') {
+          p1Name = players[0].name;
+          p2Name = players[1].name;
+          // Calculate ELO handicap
+          const { data: p1Profile } = await supabase.from('profiles').select('elo_score').eq('id', players[0].id).single();
+          const { data: p2Profile } = await supabase.from('profiles').select('elo_score').eq('id', players[1].id).single();
+          const elo1 = p1Profile?.elo_score || 1500;
+          const elo2 = p2Profile?.elo_score || 1500;
+          const diff = Math.abs(elo1 - elo2);
+          const rawHandicap = Math.floor(diff / 50);
+          const handicap = Math.min(rawHandicap, 15);
+          const handicapPlayerId = elo1 < elo2 ? players[0].id : players[1].id;
+          extraConfig = { target_score: 21, handicap_score: handicap, handicap_player_id: handicapPlayerId };
+        } else if (tournament.format === 'fun_blind_doubles') {
+          const shuffled = [...players].sort(() => Math.random() - 0.5);
+          const team1Name = `${shuffled[0].name}/${shuffled[1].name}`;
+          const team2Name = `${shuffled[2].name}/${shuffled[3].name}`;
+          p1Name = team1Name;
+          p2Name = team2Name;
+          extraConfig = {
+            sets_to_win: 3,
+            teams: [
+              { name: team1Name, player_ids: [shuffled[0].id, shuffled[1].id] },
+              { name: team2Name, player_ids: [shuffled[2].id, shuffled[3].id] },
+            ],
+          };
+        } else if (tournament.format === 'fun_arena') {
+          const champion = players[0];
+          const challengers = players.slice(1);
+          p1Name = champion.name;
+          p2Name = challengers[0]?.name || '(待定)';
+          extraConfig = {
+            sets_to_win: 3,
+            arena_champion_name: champion.name,
+            arena_streak: 0,
+            challenge_order: challengers.map((c, i) => ({ challenger_name: c.name, order: i + 1 })),
+          };
         } else {
           // fun_100_team: 2 teams of 5
           const teamNames = [...new Set(players.map(p => p.team_name || p.group_name || ''))].filter(Boolean)
@@ -221,7 +258,7 @@ export function TournamentSetupPage() {
   const isDoubles = tournament.category === 'doubles'
   const isFun = tournament.category === 'fun'
   const catLabel = isTeam ? '👥 团体赛' : isDoubles ? '🎯 双打' : isFun ? '🎪 趣味乒乓' : '🏓 单人赛'
-  const minPlayers = isTeam ? 6 : isDoubles ? 4 : isFun ? (tournament.format === 'fun_100_individual' ? 2 : 10) : 2
+  const minPlayers = isTeam ? 6 : isDoubles ? 4 : isFun ? (tournament.format === 'fun_100_individual' ? 2 : tournament.format === 'fun_100_team' ? 10 : tournament.format === 'fun_elo_handicap' ? 2 : tournament.format === 'fun_blind_doubles' ? 4 : tournament.format === 'fun_arena' ? 3 : 2) : 2
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -330,7 +367,7 @@ export function TournamentSetupPage() {
       {/* 选手列表 */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 flex justify-between">
-          <span className="font-medium text-sm">{isTeam ? '队员列表（按队伍）' : isDoubles ? '双打选手' : isFun ? (tournament.format === 'fun_100_team' ? '队员列表（每队5人）' : '参赛选手') : '参赛选手'}</span>
+          <span className="font-medium text-sm">{isTeam ? '队员列表（按队伍）' : isDoubles ? '双打选手' : isFun ? (tournament.format === 'fun_100_team' ? '队员列表（每队5人）' : tournament.format === 'fun_elo_handicap' ? '参赛选手（2人）' : tournament.format === 'fun_blind_doubles' ? '参赛选手（4的倍数）' : tournament.format === 'fun_arena' ? '参赛选手（3~8人，第1位为初始擂主）' : '参赛选手') : '参赛选手'}</span>
           <span className="text-sm text-gray-500">{players.length}/{tournament.max_players || '∞'}</span>
         </div>
         {players.length === 0 ? (
