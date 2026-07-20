@@ -208,11 +208,29 @@ export function TournamentSetupPage() {
         await supabase.from('tournaments').update({ config: { ...tournament.config, ...extraConfig } }).eq('id', id)
       }
 
+      // 盲盒双打：更新选手的 team_name
+      if (tournament.format === 'fun_blind_doubles' && extraConfig.teams) {
+        for (const team of extraConfig.teams as { name: string; player_ids: string[] }[]) {
+          await supabase.from('tournament_players')
+            .update({ team_name: team.name })
+            .eq('tournament_id', id)
+            .in('id', team.player_ids)
+        }
+      }
+
+      // 获取选手名称 -> profile_id 映射
+      const { data: tpData } = await supabase.from('tournament_players')
+        .select('player_name, profile_id').eq('tournament_id', id)
+      const nameToPid = new Map<string, string>()
+      if (tpData) tpData.forEach(p => { if (p.profile_id) nameToPid.set(p.player_name, p.profile_id) })
+
       const { error: err } = await supabase.from('matches').insert({
         tournament_id: id,
         title: `${p1Name} vs ${p2Name}`,
         player1_name: p1Name,
         player2_name: p2Name,
+        player1_id: nameToPid.get(p1Name.split('/')[0]) || null,
+        player2_id: nameToPid.get(p2Name.split('/')[0]) || null,
         created_by: profile.id,
       })
 
@@ -231,12 +249,20 @@ export function TournamentSetupPage() {
       tournament.config as any
     )
 
+    // 获取选手名称 -> profile_id 映射
+    const { data: tpData } = await supabase.from('tournament_players')
+      .select('player_name, profile_id').eq('tournament_id', id)
+    const nameToPid = new Map<string, string>()
+    if (tpData) tpData.forEach(p => { if (p.profile_id) nameToPid.set(p.player_name, p.profile_id) })
+
     // 批量插入比赛
     const inserts = generated.map(m => ({
       tournament_id: id,
       title: `${m.player1_name} vs ${m.player2_name}`,
       player1_name: m.player1_name,
       player2_name: m.player2_name,
+      player1_id: nameToPid.get(m.player1_name.split('/')[0]) || null,
+      player2_id: nameToPid.get(m.player2_name.split('/')[0]) || null,
       round: m.round || null,
       bracket_pos: m.bracket_pos || null,
       group_name: m.group_name || null,
@@ -245,6 +271,22 @@ export function TournamentSetupPage() {
 
     const { error: err2 } = await supabase.from('matches').insert(inserts)
     if (err2) { setError(err2.message); return }
+
+    // 保存引擎产生的配置变更（如盲盒双打的 teams、擂台的 challenge_order）
+    const engineConfig = tournament.config as any
+    if (engineConfig.teams || engineConfig.challenge_order || engineConfig.arena_champion_name !== undefined) {
+      await supabase.from('tournaments').update({ config: engineConfig }).eq('id', id)
+    }
+
+    // 盲盒双打：更新选手的 team_name
+    if (tournament.format === 'fun_blind_doubles' && engineConfig.teams) {
+      for (const team of engineConfig.teams) {
+        await supabase.from('tournament_players')
+          .update({ team_name: team.name })
+          .eq('tournament_id', id)
+          .in('id', team.player_ids)
+      }
+    }
 
     // 更新赛事状态
     await supabase.from('tournaments').update({ status: 'in_progress' }).eq('id', id)

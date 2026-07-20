@@ -223,7 +223,7 @@ export function TournamentCreatePage() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">比赛开始时间（可选）</label>
-          <input type="datetime-local" value={startTime}
+          <input type="datetime-local" value={startTime} min={new Date().toISOString().slice(0, 16)}
             onChange={e => setStartTime(e.target.value)}
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <p className="text-xs text-gray-400 mt-1">设置后，选手可在开始前3小时取消报名</p>

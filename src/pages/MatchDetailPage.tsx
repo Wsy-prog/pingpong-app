@@ -41,7 +41,10 @@ export function MatchDetailPage() {
 
   const isPlayer1 = match?.player1_id === profile?.id
   const isPlayer2 = match?.player2_id === profile?.id
-  const canEdit = isPlayer1 || isPlayer2 || match?.created_by === profile?.id
+  // For tournament matches (player1_id null), match by name
+  const isPlayer1ByName = !match?.player1_id && match?.player1_name === profile?.nickname
+  const isPlayer2ByName = !match?.player2_id && match?.player2_name === profile?.nickname
+  const canEdit = isPlayer1 || isPlayer2 || isPlayer1ByName || isPlayer2ByName || match?.created_by === profile?.id
 
   const isFunMode = !!tournamentConfig?.target_score
   const targetScore: number = tournamentConfig?.target_score || 100
@@ -141,13 +144,29 @@ export function MatchDetailPage() {
   }
 
   async function handleSettleElo() {
-    if (!match || !match.player1_id || !match.player2_id || !match.winner_name) return
+    if (!match || !match.winner_name) return
     if (!confirm('确定要结算 ELO 积分吗？此操作不可撤销。')) return
     setError('')
+
+    // Resolve profile IDs: try direct IDs first, then name lookup (for tournament matches)
+    let p1Id = match.player1_id
+    let p2Id = match.player2_id
+    if ((!p1Id || !p2Id) && match.tournament_id) {
+      const { data: tp } = await supabase.from('tournament_players')
+        .select('profile_id, player_name').eq('tournament_id', match.tournament_id)
+      if (tp) {
+        const p1 = tp.find(p => p.player_name === match.player1_name)
+        const p2 = tp.find(p => p.player_name === match.player2_name)
+        if (!p1Id && p1?.profile_id) p1Id = p1.profile_id
+        if (!p2Id && p2?.profile_id) p2Id = p2.profile_id
+      }
+    }
+    if (!p1Id || !p2Id) { setError('无法确定选手身份，ELO 结算跳过'); return }
+
     try {
       const winner = match.winner_name === match.player1_name ? 'player1' : 'player2'
       const { kFactor } = getEloParams(tournamentFormat, tournamentConfig)
-      await settleMatchElo(supabase, match.id, match.player1_id, match.player2_id, winner, kFactor)
+      await settleMatchElo(supabase, match.id, p1Id, p2Id, winner, kFactor)
       loadMatch()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '结算失败')
@@ -347,7 +366,7 @@ export function MatchDetailPage() {
       )}
 
       {/* ELO 结算 */}
-      {match.status === 'completed' && !match.rated && match.player1_id && match.player2_id && canEdit && (
+      {match.status === 'completed' && !match.rated && (match.player1_id || match.tournament_id) && (match.player2_id || match.tournament_id) && canEdit && (
         <button onClick={handleSettleElo}
           className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-bold hover:bg-purple-700">
           结算 ELO 积分

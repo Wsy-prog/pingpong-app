@@ -3,7 +3,6 @@ import type { TournamentEngine, Player, GeneratedMatch, Standing, ValidationResu
 /**
  * 百分个人大战引擎
  * 2人参赛，先得100分者胜
- * 实际比赛生成由 TournamentSetupPage 的最低人数 bypass 处理
  */
 export const fun100IndividualEngine: TournamentEngine = {
   type: 'fun_100_individual',
@@ -12,12 +11,17 @@ export const fun100IndividualEngine: TournamentEngine = {
   validate(_config, playerCount): ValidationResult {
     const errors: string[] = [];
     if (playerCount < 2) errors.push('至少需要2名选手');
+    if (playerCount > 2) errors.push('百分个人大战仅支持2人对战');
     return { valid: errors.length === 0, errors };
   },
 
-  generateMatches(_players: Player[], _config): GeneratedMatch[] {
-    // 实际由 TournamentSetupPage bypass 处理
-    return [];
+  generateMatches(players: Player[], config): GeneratedMatch[] {
+    if (players.length < 2) return [];
+    config.target_score = 100;
+    return [{
+      player1_name: players[0].name,
+      player2_name: players[1].name,
+    }];
   },
 
   calculateStandings(matches, _config): Standing[] {
@@ -46,7 +50,6 @@ export const fun100IndividualEngine: TournamentEngine = {
 /**
  * 百分团体大赛引擎
  * 2队各5人，7阶段接力，累计100分
- * 实际比赛生成由 TournamentSetupPage bypass 处理
  */
 export const fun100TeamEngine: TournamentEngine = {
   type: 'fun_100_team',
@@ -58,9 +61,24 @@ export const fun100TeamEngine: TournamentEngine = {
     return { valid: errors.length === 0, errors };
   },
 
-  generateMatches(_players: Player[], _config): GeneratedMatch[] {
-    // 实际由 TournamentSetupPage bypass 处理
-    return [];
+  generateMatches(players: Player[], config): GeneratedMatch[] {
+    // Get team names from the players' team assignments
+    const teamNames = [...new Set(players.map(p => p.team_name || '').filter(Boolean))]
+    if (teamNames.length < 2 || players.length < 10) return []
+
+    const t1Players = players.filter(p => p.team_name === teamNames[0])
+    const t2Players = players.filter(p => p.team_name === teamNames[1])
+
+    config.target_score = 100
+    config.mode = 'team_relay'
+    config.team1 = { name: teamNames[0], players: t1Players.map(p => p.name) }
+    config.team2 = { name: teamNames[1], players: t2Players.map(p => p.name) }
+
+    // Single match entry (stage details handled in MatchDetailPage)
+    return [{
+      player1_name: teamNames[0],
+      player2_name: teamNames[1],
+    }]
   },
 
   calculateStandings(matches, _config): Standing[] {

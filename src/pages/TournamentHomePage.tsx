@@ -80,7 +80,7 @@ export function TournamentHomePage() {
         let joined = false
         if (profile) {
           const { data: existing } = await supabase
-            .from('tournament_players').select('id').eq('tournament_id', t.id).eq('player_name', profile.nickname).maybeSingle()
+            .from('tournament_players').select('id').eq('tournament_id', t.id).eq('profile_id', profile.id).maybeSingle()
           joined = !!existing
         }
         return { ...t, player_count: pc || 0, joined }
@@ -107,9 +107,15 @@ export function TournamentHomePage() {
       setJoining(null)
       return
     }
+    // Get current player count for seed assignment
+    const { count: currentCount } = await supabase
+      .from('tournament_players').select('*', { count: 'exact', head: true }).eq('tournament_id', tournamentId)
+
     const { error } = await supabase.from('tournament_players').insert({
       tournament_id: tournamentId,
       player_name: profile.nickname,
+      profile_id: profile.id,
+      seed: (currentCount || 0) + 1,
     })
     if (error) {
       if (error.message.includes('duplicate') || error.message.includes('unique')) {
@@ -144,7 +150,6 @@ export function TournamentHomePage() {
   async function cancelRegistration(tournamentId: string) {
     if (!profile) return
     const t = [...ongoingTournaments, ...historyTournaments].find(o => o.id === tournamentId)
-    // 所有有 start_time 且距开赛不足 3 小时的比赛都不可取消
     if (t) {
       const cancelCheck = canCancel(t)
       if (!cancelCheck.ok) {
@@ -154,20 +159,42 @@ export function TournamentHomePage() {
     }
     if (!window.confirm('确定取消报名吗？')) return
     setJoining(tournamentId)
-    const { error } = await supabase
+
+    // Look up my tournament_player record
+    const { data: myPlayer } = await supabase
       .from('tournament_players')
-      .delete()
+      .select('id, team_id')
       .eq('tournament_id', tournamentId)
-      .eq('player_name', profile.nickname)
-    if (error) {
-      alert('取消失败: ' + error.message)
-    } else {
-      setOngoingTournaments(prev => prev.map(o =>
-        o.id === tournamentId ? { ...o, player_count: Math.max(0, o.player_count - 1), joined: false } : o
-      ))
-      loadMyTournaments()
-      loadAllTournaments()
+      .eq('profile_id', profile.id)
+      .maybeSingle()
+
+    if (myPlayer) {
+      // If I'm a team captain, clean up the team
+      if (myPlayer.team_id) {
+        const { data: team } = await supabase.from('teams').select('id, captain_player_id').eq('id', myPlayer.team_id).single()
+        if (team && team.captain_player_id === myPlayer.id) {
+          // Remove all members from team
+          await supabase.from('tournament_players')
+            .update({ team_id: null, role: 'member' })
+            .eq('team_id', myPlayer.team_id)
+          await supabase.from('teams').delete().eq('id', myPlayer.team_id)
+        } else {
+          // Just remove myself from team
+          await supabase.from('tournament_players')
+            .update({ team_id: null, role: 'member' })
+            .eq('id', myPlayer.id)
+        }
+      }
+
+      // Delete my tournament player record
+      await supabase.from('tournament_players').delete().eq('id', myPlayer.id)
     }
+
+    setOngoingTournaments(prev => prev.map(o =>
+      o.id === tournamentId ? { ...o, player_count: Math.max(0, o.player_count - 1), joined: false } : o
+    ))
+    loadMyTournaments()
+    loadAllTournaments()
     setJoining(null)
   }
 

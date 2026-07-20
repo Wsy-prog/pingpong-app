@@ -3,14 +3,16 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { getEngine } from '../lib/tournament'
+import { settleMatchElo } from '../lib/elo'
 import type { Tournament, Match } from '../types'
 import type { Player as EnginePlayer } from '../lib/tournament'
 import { StatusBadge } from '../components/common/StatusBadge'
+import { TeamManager } from '../components/tournament/TeamManager'
 
 export function TournamentDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, isAdmin } = useAuth()
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [matches, setMatches] = useState<Match[]>([])
   const [players, setPlayers] = useState<EnginePlayer[]>([])
@@ -66,14 +68,16 @@ export function TournamentDetailPage() {
     }
 
     if (t.format === 'fun_arena') {
-      if (t.status !== 'completed') return null
       const completedMatches = matches.filter(m => m.status === 'completed')
       if (completedMatches.length === 0) return null
       const lastMatch = completedMatches[completedMatches.length - 1]
       return lastMatch.winner_name || null
     }
 
-    return null
+    // 所有其他赛制：最后一场已完成的比赛的胜者
+    const completed = matches.filter(m => m.status === 'completed' && m.winner_name)
+    if (completed.length === 0) return null
+    return completed[completed.length - 1].winner_name
   })()
 
   return (
@@ -286,6 +290,11 @@ export function TournamentDetailPage() {
         </div>
       )}
 
+      {/* 队伍管理 — 团体赛草稿阶段 */}
+      {tournament.status === 'draft' && tournament.category === 'team' && (
+        <TeamManager tournamentId={id!} tournamentName={tournament.name} onUpdate={loadTournament} />
+      )}
+
       {/* 操作按钮 */}
       {tournament.status === 'draft' && (
         <Link to={`/tournaments/${id}/setup`}
@@ -310,6 +319,23 @@ export function TournamentDetailPage() {
           结束赛事
         </button>
       )}
+
+      {/* 删除赛事 — 创建者或管理员可见 */}
+      {(isAdmin || tournament.created_by === currentUser?.id) && (
+        <button onClick={async () => {
+          if (!confirm('⚠️ 确定删除此赛事及其所有相关数据？此操作不可撤销！')) return
+          if (!confirm('再次确认：删除赛事「' + tournament.name + '」？')) return
+          await supabase.from('matches').delete().eq('tournament_id', id)
+          await supabase.from('teams').delete().eq('tournament_id', id)
+          await supabase.from('notifications').delete().eq('related_id', id)
+          await supabase.from('tournament_players').delete().eq('tournament_id', id)
+          await supabase.from('tournaments').delete().eq('id', id)
+          navigate('/tournaments')
+        }}
+          className="w-full py-2.5 border border-red-200 text-red-400 rounded-xl text-sm hover:bg-red-50">
+          删除赛事
+        </button>
+      )}
     </div>
   )
 }
@@ -331,11 +357,10 @@ const ROUND_LABELS: Record<number, string> = {
   101: 'QF', 102: 'SF', 103: 'F',
 }
 
-function getRoundLabel(round: number, isKo: boolean): string {
-  const offset = isKo ? round - 100 : round
+function getRoundLabel(round: number, isKo: boolean, totalRounds: number): string {
   if (ROUND_LABELS[round]) return ROUND_LABELS[round]
 
-  const totalRounds = isKo ? 3 : 4 // estimate
+  const offset = isKo ? round - 100 : round
   if (offset === totalRounds) return 'F'
   if (offset === totalRounds - 1) return 'SF'
   if (offset === totalRounds - 2) return 'QF'
@@ -355,7 +380,7 @@ function renderBracketView(matches: Match[], currentUserName?: string) {
         {rounds.map((round, roundIdx) => {
           const roundMatches = matches.filter(m => m.round === round).sort((a, b) => (a.bracket_pos || 0) - (b.bracket_pos || 0))
           const isLastRound = roundIdx === totalRounds - 1
-          const label = getRoundLabel(round, isKo)
+          const label = getRoundLabel(round, isKo, totalRounds)
 
           return (
             <div key={round} style={{ flex: '0 0 170px', position: 'relative' }}>
@@ -501,6 +526,38 @@ function MyBracketSection({
       player1_sets: s1, player2_sets: s2,
     }).eq('id', matchId).eq('status', 'in_progress')
     if (error) { setScoreError(error.message); return }
+
+    // 结算 ELO 积分
+    try {
+      const { data: match } = await supabase.from('matches').select('player1_id, player2_id').eq('id', matchId).single()
+      let p1Id = match?.player1_id
+      let p2Id = match?.player2_id
+
+      // 如果 match 上没有 player_id，从 tournament_players 按名称查找
+      if (!p1Id || !p2Id) {
+        const { data: players } = await supabase.from('tournament_players')
+          .select('profile_id, player_name').eq('tournament_id', tournament.id)
+        if (players) {
+          const p1 = players.find(p => p.player_name === p1Name)
+          const p2 = players.find(p => p.player_name === p2Name)
+          if (!p1Id && p1?.profile_id) p1Id = p1.profile_id
+          if (!p2Id && p2?.profile_id) p2Id = p2.profile_id
+        }
+      }
+
+      if (p1Id && p2Id) {
+        // Format-specific K factor
+        const kFactor =
+          tournament.format === 'fun_elo_handicap' ? 16 :
+          tournament.format === 'fun_blind_doubles' ? 20 :
+          tournament.format === 'fun_arena' ? 25 :
+          32
+        await settleMatchElo(supabase, matchId, p1Id, p2Id, winner as 'player1' | 'player2', kFactor)
+      }
+    } catch (eloErr: any) {
+      console.warn('ELO settlement skipped:', eloErr?.message || eloErr)
+    }
+
     setQuickMatchId(null); setScoreError('')
     setScoreMap(prev => { const n = { ...prev }; delete n[matchId]; return n })
     onUpdated()
@@ -711,8 +768,10 @@ function AdvanceRoundButton({ tournamentId, matches, tournament, players, onUpda
   const isArena = tournament.format === 'fun_arena'
 
   const handleAdvance = async () => {
+    // Sort matches by bracket_pos before passing to engine (critical for correct pairing)
+    const sortedMatches = [...matches].sort((a, b) => (a.bracket_pos || 0) - (b.bracket_pos || 0))
     const nextMatches = engine.getNextRound?.({
-      matches: matches as any, config: tournament.config as any, players
+      matches: sortedMatches as any, config: tournament.config as any, players
     } as any)
     if (!nextMatches || nextMatches.length === 0) return
 
@@ -737,7 +796,6 @@ function AdvanceRoundButton({ tournamentId, matches, tournament, players, onUpda
       round: m.round || undefined,
       bracket_pos: m.bracket_pos || undefined,
       status: 'scheduled' as const,
-      created_by: matches[0]?.created_by || '',
     }))
 
     const { error } = await supabase.from('matches').insert(inserts)
