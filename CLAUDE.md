@@ -3,7 +3,7 @@
 > 技术栈：React 18 + TypeScript + Vite + Tailwind CSS + Supabase
 > 在线地址：https://pingpong-app-eight.vercel.app
 > 源码位置：~/pingpong-app/
-> 文档存档：C:\001\（17个文件，3000+行）
+> 文档存档：E:\乒乓网站\001\（20+个文件，含 GUIDE.md 协作开发指南）
 > 开发命令：cd ~/pingpong-app && npm run dev
 
 ## ⚡ 快速链接
@@ -42,12 +42,13 @@ git add . && git commit -m "说明" && git push   # 推送 → 自动部署
 - **自由约球**: 双视图 + 6分区 + 颜色边框 + 结束时间
 - **个人主页**: 个人宣言 + 球拍配置 + 胜率统计
 
-## 📄 页面（17个）
+## 📄 页面（20个）
 
 /login → / → /matches/new → /matches/:id → /tournaments/new
 → /tournaments → /tournaments/:id/setup → /tournaments/:id
 → /matchmaking → /rankings → /chat → /notifications
-→ /profile/:id → /history → /admin → /health
+→ /profile/:id → /history → /admin → /health → /utility
+→ /prediction → /prediction/:id → /coins → /rewards
 
 ## 🔑 已完成的修改记录
 
