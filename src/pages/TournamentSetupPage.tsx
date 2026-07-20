@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { getEngine } from '../lib/tournament'
-import type { TournamentFormat } from '../lib/tournament'
 import type { Tournament } from '../types'
 
 interface PlayerEntry {
@@ -25,6 +24,7 @@ export function TournamentSetupPage() {
   const [manualName, setManualName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [predictionEnabled, setPredictionEnabled] = useState(false)
 
   // 团体赛：当前选择要加入的队伍
   const [selectedTeam, setSelectedTeam] = useState('')
@@ -224,17 +224,36 @@ export function TournamentSetupPage() {
       const nameToPid = new Map<string, string>()
       if (tpData) tpData.forEach(p => { if (p.profile_id) nameToPid.set(p.player_name, p.profile_id) })
 
-      const { error: err } = await supabase.from('matches').insert({
+      const { data: matchData, error: err } = await supabase.from('matches').insert({
         tournament_id: id,
         title: `${p1Name} vs ${p2Name}`,
         player1_name: p1Name,
         player2_name: p2Name,
         player1_id: nameToPid.get(p1Name.split('/')[0]) || null,
         player2_id: nameToPid.get(p2Name.split('/')[0]) || null,
+        prediction_enabled: predictionEnabled,
         created_by: profile.id,
       })
+      .select()
+      .single()
 
       if (err) { setError(err.message); return }
+
+      // 若开启竞猜，自动创建 prediction_event
+      if (predictionEnabled && matchData) {
+        await supabase.from('prediction_events').insert({
+          title: `${p1Name} vs ${p2Name}`,
+          event_type: 'platform_match',
+          match_id: matchData.id,
+          options: [
+            { label: `${p1Name} 获胜`, value: 'player1' },
+            { label: `${p2Name} 获胜`, value: 'player2' },
+          ],
+          deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+          created_by: profile.id,
+        })
+      }
+
       await supabase.from('tournaments').update({ status: 'in_progress' }).eq('id', id)
       navigate(`/tournaments/${id}`)
       return
@@ -266,10 +285,11 @@ export function TournamentSetupPage() {
       round: m.round || null,
       bracket_pos: m.bracket_pos || null,
       group_name: m.group_name || null,
+      prediction_enabled: predictionEnabled,
       created_by: profile.id,
     }))
 
-    const { error: err2 } = await supabase.from('matches').insert(inserts)
+    const { data: insertedMatches, error: err2 } = await supabase.from('matches').insert(inserts).select()
     if (err2) { setError(err2.message); return }
 
     // 保存引擎产生的配置变更（如盲盒双打的 teams、擂台的 challenge_order）
@@ -286,6 +306,22 @@ export function TournamentSetupPage() {
           .eq('tournament_id', id)
           .in('id', team.player_ids)
       }
+    }
+
+    // 若开启竞猜，为所有比赛自动创建 prediction_event
+    if (predictionEnabled && insertedMatches) {
+      const eventInserts = insertedMatches.map((m: any) => ({
+        title: `${m.player1_name} vs ${m.player2_name}`,
+        event_type: 'platform_match',
+        match_id: m.id,
+        options: [
+          { label: `${m.player1_name} 获胜`, value: 'player1' },
+          { label: `${m.player2_name} 获胜`, value: 'player2' },
+        ],
+        deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+        created_by: profile.id,
+      }))
+      await supabase.from('prediction_events').insert(eventInserts)
     }
 
     // 更新赛事状态
@@ -471,12 +507,19 @@ export function TournamentSetupPage() {
         )}
       </div>
 
-      {/* 生成对阵 */}
+      {/* 竞猜开关 + 生成对阵 */}
       {players.length >= minPlayers && (
-        <button onClick={generateMatches}
-          className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
-          生成赛程并开始赛事
-        </button>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 cursor-pointer bg-blue-50 rounded-xl p-3 border border-blue-100">
+            <input type="checkbox" checked={predictionEnabled} onChange={e => setPredictionEnabled(e.target.checked)}
+              className="rounded border-gray-300" />
+            <span className="text-sm text-gray-700">🎯 为所有比赛开放竞猜（用户可投注预测胜负）</span>
+          </label>
+          <button onClick={generateMatches}
+            className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
+            生成赛程并开始赛事
+          </button>
+        </div>
       )}
     </div>
   )

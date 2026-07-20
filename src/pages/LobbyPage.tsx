@@ -35,7 +35,8 @@ const features = [
   { title: '赛事中心', path: '/tournaments', icon: '🏆', color: 'bg-yellow-100 text-yellow-600' },
   { title: '实时排名', path: '/rankings', icon: '📊', color: 'bg-blue-100 text-blue-600' },
   { title: '聊天大厅', path: '/chat', icon: '💬', color: 'bg-indigo-100 text-indigo-600' },
-  { title: '实用工具', path: '/utility', icon: '🧰', color: 'bg-orange-100 text-orange-600' },
+  { title: '有奖竞猜', path: '/prediction', icon: '🎯', color: 'bg-orange-100 text-orange-600' },
+  { title: '实用工具', path: '/utility', icon: '🧰', color: 'bg-gray-100 text-gray-600' },
   { title: '健康打卡', path: '/health', icon: '💪', color: 'bg-rose-100 text-rose-600' },
 ]
 

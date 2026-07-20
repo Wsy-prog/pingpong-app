@@ -9,6 +9,7 @@ interface AuthContextType {
   signUp: (username: string, password: string, nickname: string) => Promise<string | null>
   signIn: (username: string, password: string) => Promise<string | null>
   signOut: () => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -41,7 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
-      
+      coins: result.coins ?? 0,
+      badges: typeof result.badges === 'string' ? JSON.parse(result.badges || '[]') : (result.badges || []),
       created_at: '',
     }
     setUser(profile)
@@ -62,12 +64,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: result.username,
       nickname: result.nickname,
       elo_score: result.elo_score,
-      
+      coins: result.coins ?? 0,
+      badges: typeof result.badges === 'string' ? JSON.parse(result.badges || '[]') : (result.badges || []),
       created_at: '',
     }
     setUser(profile)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
     return null
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) return
+    const current = JSON.parse(stored) as Profile
+    const { data } = await supabase
+      .from('profiles')
+      .select('coins, badges')
+      .eq('id', current.id)
+      .single()
+    if (data) {
+      const updated: Profile = {
+        ...current,
+        coins: data.coins ?? 0,
+        badges: typeof data.badges === 'string' ? JSON.parse(data.badges || '[]') : (data.badges || []),
+      }
+      setUser(updated)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+    }
   }, [])
 
   const signOut = useCallback(() => {
@@ -76,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin: user?.username === 'guanliyuan', signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: user?.username === 'guanliyuan', signUp, signIn, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

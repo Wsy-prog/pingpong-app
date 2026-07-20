@@ -16,7 +16,7 @@ interface UserInfo {
 export function AdminPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'users' | 'chat' | 'matchmaking' | 'fortune' | 'announcements'>('users')
+  const [tab, setTab] = useState<'users' | 'chat' | 'matchmaking' | 'fortune' | 'announcements' | 'prediction' | 'rewards' | 'coingrants'>('users')
 
   // 用户管理
   const [users, setUsers] = useState<UserInfo[]>([])
@@ -363,6 +363,18 @@ export function AdminPage() {
         <button onClick={() => { setTab('announcements'); loadAnnouncements() }}
           className={'px-4 py-1.5 rounded-lg text-sm font-medium ' + (tab === 'announcements' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600')}>
           📢 资讯管理
+        </button>
+        <button onClick={() => setTab('prediction')}
+          className={'px-4 py-1.5 rounded-lg text-sm font-medium ' + (tab === 'prediction' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600')}>
+          🎯 竞猜管理
+        </button>
+        <button onClick={() => setTab('rewards')}
+          className={'px-4 py-1.5 rounded-lg text-sm font-medium ' + (tab === 'rewards' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600')}>
+          🎁 奖品管理
+        </button>
+        <button onClick={() => setTab('coingrants')}
+          className={'px-4 py-1.5 rounded-lg text-sm font-medium ' + (tab === 'coingrants' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600')}>
+          💰 金币发放
         </button>
       </div>
 
@@ -761,6 +773,413 @@ export function AdminPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'prediction' && <PredictionAdmin />}
+      {tab === 'rewards' && <RewardsAdmin />}
+      {tab === 'coingrants' && <CoinGrantsAdmin />}
+    </div>
+  )
+}
+
+// ============ 竞猜管理子组件 ============
+
+function PredictionAdmin() {
+  const { user } = useAuth()
+  const [events, setEvents] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  // Create form
+  const [showForm, setShowForm] = useState(false)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [optionInput, setOptionInput] = useState('')
+  const [options, setOptions] = useState<string[]>([])
+  const [deadline, setDeadline] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => { loadEvents() }, [])
+
+  async function loadEvents() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('prediction_events')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setEvents(data || [])
+    setLoading(false)
+  }
+
+  function addOption() {
+    if (optionInput.trim() && !options.includes(optionInput.trim())) {
+      setOptions([...options, optionInput.trim()])
+      setOptionInput('')
+    }
+  }
+
+  async function createEvent() {
+    if (!title || options.length < 2 || !deadline) {
+      setError('请填写标题、至少2个选项和截止时间')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    const opts = options.map(o => ({ label: o, value: o }))
+    if (!user) { setError('请先登录'); return }
+    const { error: err } = await supabase.from('prediction_events').insert({
+      title, description: description || null,
+      event_type: 'external_custom',
+      options: opts,
+      deadline: new Date(deadline).toISOString(),
+      created_by: user.id,
+    })
+    if (err) { setError(err.message); setSubmitting(false); return }
+    setSuccess('创建成功')
+    setShowForm(false)
+    setTitle(''); setDescription(''); setOptions([]); setDeadline('')
+    setSubmitting(false)
+    loadEvents()
+  }
+
+  async function closeEvent(id: string) {
+    await supabase.from('prediction_events').update({ status: 'closed' }).eq('id', id)
+    loadEvents()
+  }
+
+  async function settleEvent(id: string, winningOption: number) {
+    const { error: err } = await supabase.rpc('settle_prediction_event', {
+      p_event_id: id, p_winning_option: winningOption,
+    })
+    if (err) { setError(err.message); return }
+    setSuccess('结算完成')
+    loadEvents()
+  }
+
+  async function cancelEvent(id: string) {
+    const { error: err } = await supabase.rpc('cancel_prediction_event', { p_event_id: id })
+    if (err) { setError(err.message); return }
+    setSuccess('已取消并退款')
+    loadEvents()
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm flex items-center justify-between">
+        <span>竞猜事件管理</span>
+        <button onClick={() => setShowForm(!showForm)}
+          className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700">
+          + 创建事件
+        </button>
+      </div>
+
+      {error && <div className="px-4 py-2 bg-red-50 text-red-600 text-sm">{error}</div>}
+      {success && <div className="px-4 py-2 bg-green-50 text-green-600 text-sm">{success}</div>}
+
+      {showForm && (
+        <div className="p-4 border-b space-y-3">
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="竞猜标题" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="描述（可选）" className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
+          <div className="flex gap-2">
+            <input value={optionInput} onChange={e => setOptionInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOption() } }}
+              placeholder="添加选项" className="flex-1 px-3 py-2 border rounded-lg text-sm" />
+            <button onClick={addOption} className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">添加</button>
+          </div>
+          {options.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {options.map((o, i) => (
+                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full flex items-center gap-1">
+                  {o}
+                  <button onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600">&times;</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <button onClick={createEvent} disabled={submitting}
+            className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+            {submitting ? '创建中...' : '创建竞猜事件'}
+          </button>
+        </div>
+      )}
+
+      {loading ? <p className="text-center py-6 text-gray-400 text-sm">加载中...</p> : events.length === 0 ? (
+        <p className="text-center py-6 text-gray-400 text-sm">暂无竞猜事件</p>
+      ) : (
+        <div className="divide-y">
+          {events.map((ev: any) => (
+            <div key={ev.id} className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{ev.title}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  ev.status === 'open' ? 'bg-green-100 text-green-700' :
+                  ev.status === 'settled' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>{ev.status}</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                <span>奖池 {ev.pool_total} 币</span>
+                <span>·</span>
+                <span>{new Date(ev.deadline).toLocaleString('zh-CN')}</span>
+              </div>
+              {ev.status === 'open' && (
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => closeEvent(ev.id)} className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200">关闭投注</button>
+                  <button onClick={() => cancelEvent(ev.id)} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">取消并退款</button>
+                </div>
+              )}
+              {ev.status === 'closed' && (
+                <div className="flex gap-1 mt-2 flex-wrap">
+                  {(typeof ev.options === 'string' ? JSON.parse(ev.options) : ev.options || []).map((opt: any, i: number) => (
+                    <button key={i} onClick={() => settleEvent(ev.id, i)}
+                      className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                      结算: {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============ 奖品管理子组件 ============
+
+function RewardsAdmin() {
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  // Create form
+  const [showForm, setShowForm] = useState(false)
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [cost, setCost] = useState(100)
+  const [stock, setStock] = useState(-1)
+  const [itemType, setItemType] = useState<'physical' | 'badge'>('physical')
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  useEffect(() => { loadItems() }, [])
+
+  async function loadItems() {
+    setLoading(true)
+    const { data } = await supabase.from('reward_items').select('*').order('cost', { ascending: true })
+    setItems(data || [])
+    setLoading(false)
+  }
+
+  async function saveItem() {
+    if (!name || cost < 1) { setError('请填写名称和价格'); return }
+    if (editingId) {
+      const { error: err } = await supabase.from('reward_items').update({
+        name, description: desc || null, cost, stock, type: itemType, is_active: true,
+      }).eq('id', editingId)
+      if (err) { setError(err.message); return }
+    } else {
+      const { error: err } = await supabase.from('reward_items').insert({
+        name, description: desc || null, cost, stock, type: itemType,
+      })
+      if (err) { setError(err.message); return }
+    }
+    setShowForm(false); setEditingId(null)
+    setName(''); setDesc(''); setCost(100); setStock(-1)
+    loadItems()
+  }
+
+  function editItem(item: any) {
+    setEditingId(item.id)
+    setName(item.name)
+    setDesc(item.description || '')
+    setCost(item.cost)
+    setStock(item.stock)
+    setItemType(item.type)
+    setShowForm(true)
+  }
+
+  async function toggleActive(item: any) {
+    await supabase.from('reward_items').update({ is_active: !item.is_active }).eq('id', item.id)
+    loadItems()
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm flex items-center justify-between">
+        <span>奖品管理</span>
+        <button onClick={() => { setEditingId(null); setName(''); setDesc(''); setCost(100); setStock(-1); setShowForm(!showForm) }}
+          className="text-xs bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700">
+          + 添加奖品
+        </button>
+      </div>
+      {error && <div className="px-4 py-2 bg-red-50 text-red-600 text-sm">{error}</div>}
+      {showForm && (
+        <div className="p-4 border-b space-y-3">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="奖品名称" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="描述" className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-gray-500">价格（币）</label>
+              <input type="number" value={cost} onChange={e => setCost(parseInt(e.target.value) || 1)}
+                className="w-full px-3 py-2 border rounded-lg text-sm" min={1} />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-gray-500">库存（-1=无限）</label>
+              <input type="number" value={stock} onChange={e => setStock(parseInt(e.target.value) || -1)}
+                className="w-full px-3 py-2 border rounded-lg text-sm" min={-1} />
+            </div>
+          </div>
+          <select value={itemType} onChange={e => setItemType(e.target.value as any)}
+            className="w-full px-3 py-2 border rounded-lg text-sm">
+            <option value="physical">🎁 实物</option>
+            <option value="badge">🏅 徽章</option>
+          </select>
+          <div className="flex gap-2">
+            <button onClick={() => setShowForm(false)}
+              className="flex-1 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">取消</button>
+            <button onClick={saveItem}
+              className="flex-1 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+              {editingId ? '保存' : '添加'}
+            </button>
+          </div>
+        </div>
+      )}
+      {loading ? <p className="text-center py-4 text-gray-400 text-sm">加载中...</p> : items.length === 0 ? (
+        <p className="text-center py-4 text-gray-400 text-sm">暂无奖品</p>
+      ) : (
+        <div className="divide-y">
+          {items.map((item: any) => (
+            <div key={item.id} className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{item.name}</p>
+                <p className="text-xs text-gray-400">{item.cost} 币 · {item.type === 'badge' ? '🏅徽章' : '🎁实物'} · 库存 {item.stock === -1 ? '∞' : item.stock}</p>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => editItem(item)} className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">编辑</button>
+                <button onClick={() => toggleActive(item)}
+                  className={`text-xs px-2 py-1 rounded ${item.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                  {item.is_active ? '下架' : '上架'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============ 金币发放子组件 ============
+
+function CoinGrantsAdmin() {
+  const [users, setUsers] = useState<any[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [amount, setAmount] = useState(50)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const { user: admin } = useAuth()
+  const [transactions, setTransactions] = useState<any[]>([])
+
+  useEffect(() => { loadRecent(); searchUsers() }, [searchTerm])
+
+  async function searchUsers() {
+    if (searchTerm.length < 1) { setUsers([]); return }
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, nickname, coins')
+      .or(`username.ilike.%${searchTerm}%,nickname.ilike.%${searchTerm}%`)
+      .limit(10)
+    setUsers(data || [])
+  }
+
+  async function loadRecent() {
+    const { data } = await supabase
+      .from('coin_transactions')
+      .select('*, profiles!inner(username, nickname)')
+      .eq('type', 'admin_grant')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setTransactions(data || [])
+  }
+
+  async function grantCoins() {
+    if (!admin || !selectedUser) { setError('请选择用户'); return }
+    setSubmitting(true)
+    setError('')
+    const { error: err } = await supabase.rpc('admin_grant_coins', {
+      p_admin_id: admin.id, p_target_id: selectedUser.id, p_amount: amount, p_note: note || '管理员发放',
+    })
+    if (err) { setError(err.message); setSubmitting(false); return }
+    setSuccess(`已向 ${selectedUser.nickname || selectedUser.username} 发放 ${amount} 币`)
+    setSubmitting(false)
+    setSelectedUser(null)
+    setAmount(50)
+    setNote('')
+    loadRecent()
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">金币发放</div>
+      {error && <div className="px-4 py-2 bg-red-50 text-red-600 text-sm">{error}</div>}
+      {success && <div className="px-4 py-2 bg-green-50 text-green-600 text-sm">{success}</div>}
+      <div className="p-4 space-y-3">
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">搜索用户</label>
+          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            placeholder="输入用户名或昵称搜索..."
+            className="w-full px-3 py-2 border rounded-lg text-sm" />
+          {users.length > 0 && (
+            <div className="mt-1 border rounded-lg divide-y max-h-40 overflow-y-auto">
+              {users.map((u: any) => (
+                <button key={u.id} onClick={() => { setSelectedUser(u); setSearchTerm(''); setUsers([]) }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${selectedUser?.id === u.id ? 'bg-blue-50' : ''}`}>
+                  {u.nickname || u.username} ({u.username}) — 💰{u.coins}币
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {selectedUser && (
+          <>
+            <div className="bg-blue-50 rounded-lg p-3 text-sm">
+              目标用户: <strong>{selectedUser.nickname || selectedUser.username}</strong> · 当前余额: {selectedUser.coins} 币
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 block mb-1">金币数量</label>
+                <input type="number" value={amount} onChange={e => setAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm" min={1} />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 block mb-1">备注</label>
+                <input value={note} onChange={e => setNote(e.target.value)}
+                  placeholder="发放原因" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+            </div>
+            <button onClick={grantCoins} disabled={submitting}
+              className="w-full py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+              {submitting ? '发放中...' : `发放 ${amount} 币`}
+            </button>
+          </>
+        )}
+      </div>
+      {transactions.length > 0 && (
+        <div className="border-t">
+          <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">最近发放记录</div>
+          {transactions.map((tx: any) => (
+            <div key={tx.id} className="px-4 py-2 text-xs border-t flex justify-between">
+              <span>{(tx.profiles as any)?.nickname || '用户'} +{tx.amount}币</span>
+              <span className="text-gray-400">{new Date(tx.created_at).toLocaleString('zh-CN')}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -18,6 +18,7 @@ export function MatchCreatePage() {
   const [matchDate, setMatchDate] = useState('')
   const [location, setLocation] = useState('')
   const [rated, setRated] = useState(true)
+  const [predictionEnabled, setPredictionEnabled] = useState(false)
 
   // 搜索用户
   useEffect(() => {
@@ -59,6 +60,7 @@ export function MatchCreatePage() {
         match_date: matchDate || null,
         location: location || null,
         rated,
+        prediction_enabled: predictionEnabled,
         created_by: profile.id,
       })
       .select()
@@ -68,6 +70,21 @@ export function MatchCreatePage() {
       setError(err.message)
       setSubmitting(false)
       return
+    }
+
+    // 若开启竞猜，自动创建 prediction_event
+    if (predictionEnabled) {
+      await supabase.from('prediction_events').insert({
+        title: `${name1} vs ${name2}`,
+        event_type: 'platform_match',
+        match_id: data.id,
+        options: [
+          { label: `${name1} 获胜`, value: 'player1' },
+          { label: `${name2} 获胜`, value: 'player2' },
+        ],
+        deadline: matchDate || new Date(Date.now() + 7 * 86400000).toISOString(),
+        created_by: profile.id,
+      })
     }
 
     navigate(`/matches/${data.id}`)
@@ -161,6 +178,11 @@ export function MatchCreatePage() {
           <input type="checkbox" checked={rated} onChange={e => setRated(e.target.checked)}
             className="w-4 h-4 text-blue-600 rounded" />
           <span className="text-sm text-gray-700">结算 ELO 积分</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={predictionEnabled} onChange={e => setPredictionEnabled(e.target.checked)}
+            className="rounded border-gray-300" />
+          <span className="text-sm text-gray-700">开放竞猜 🎯</span>
         </label>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}

@@ -69,6 +69,7 @@ export function Header() {
             <Link to="/tournaments/new" className="text-sm text-gray-600 hover:text-blue-600">赛事</Link>
             <Link to="/rankings" className="text-sm text-gray-600 hover:text-blue-600">排名</Link>
             <Link to="/utility" className="text-sm text-gray-600 hover:text-blue-600">工具</Link>
+            <Link to="/prediction" className="text-sm text-gray-600 hover:text-orange-600 font-medium">竞猜</Link>
             <Link to="/chat" className="relative text-sm text-gray-600 hover:text-blue-600">
               聊天
               {chatUnread > 0 && (
@@ -88,6 +89,9 @@ export function Header() {
             {isAdmin && (
               <Link to="/admin" className="text-sm text-red-500 hover:text-red-600 font-medium">管理</Link>
             )}
+            <Link to="/coins" className="text-sm text-orange-600 font-bold hover:text-orange-700">
+              💰{user.coins ?? 0}
+            </Link>
             <Link to={`/profile/${user.id}`} className="text-sm font-medium text-gray-800">
               {user.nickname || '我'}
             </Link>

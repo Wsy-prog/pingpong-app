@@ -7,6 +7,8 @@ export interface Profile {
   forehand_rubber?: string | null
   backhand_rubber?: string | null
   elo_score: number
+  coins: number
+  badges: string[]
   created_at: string
 }
 
@@ -25,6 +27,7 @@ export interface Match {
   player1_sets: number
   player2_sets: number
   rated: boolean
+  prediction_enabled: boolean
   round: number | null
   bracket_pos: number | null
   group_name: string | null
@@ -141,4 +144,82 @@ export interface Announcement {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+// === 有奖竞猜系统 ===
+
+export interface CoinTransaction {
+  id: string
+  profile_id: string
+  amount: number
+  type: 'daily_checkin' | 'tournament_reward' | 'admin_grant' | 'bet_place' | 'bet_win' | 'bet_refund' | 'reward_redeem'
+  reference_id: string | null
+  balance_after: number
+  note: string | null
+  created_at: string
+}
+
+export interface PredictionOption {
+  label: string
+  value: string
+}
+
+export interface PredictionEvent {
+  id: string
+  title: string
+  description: string | null
+  match_id: string | null
+  tournament_id: string | null
+  event_type: 'platform_match' | 'external_custom'
+  options: PredictionOption[]
+  pool_total: number
+  status: 'open' | 'closed' | 'settled' | 'cancelled'
+  winning_option: number | null
+  house_cut: number
+  deadline: string
+  created_by: string
+  created_at: string
+  settled_at: string | null
+}
+
+export interface PredictionBet {
+  id: string
+  event_id: string
+  user_id: string
+  option_index: number
+  amount: number
+  settled: boolean
+  won_amount: number | null
+  created_at: string
+}
+
+export interface RewardItem {
+  id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  cost: number
+  stock: number
+  type: 'physical' | 'badge'
+  badge_id: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface RewardRedemption {
+  id: string
+  item_id: string
+  user_id: string
+  coins_spent: number
+  status: 'pending' | 'fulfilled' | 'cancelled'
+  created_at: string
+}
+
+export interface DailyCheckin {
+  id: string
+  user_id: string
+  checkin_date: string
+  coins_earned: number
+  streak_count: number
+  created_at: string
 }

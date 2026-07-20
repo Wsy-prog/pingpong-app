@@ -22,6 +22,10 @@ import { TournamentDetailPage } from './pages/TournamentDetailPage'
 import { AdminPage } from './pages/AdminPage'
 import { HealthCheckinPage } from './pages/HealthCheckinPage'
 import { UtilityPage } from './pages/UtilityPage'
+import { PredictionPage } from './pages/PredictionPage'
+import { PredictionDetailPage } from './pages/PredictionDetailPage'
+import { CoinHistoryPage } from './pages/CoinHistoryPage'
+import { RewardShopPage } from './pages/RewardShopPage'
 
 export default function App() {
   useEffect(() => { initEngines() }, [])
@@ -54,6 +58,10 @@ export default function App() {
             <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
             <Route path="/health" element={<HealthCheckinPage />} />
             <Route path="/utility" element={<UtilityPage />} />
+            <Route path="/prediction" element={<PredictionPage />} />
+            <Route path="/prediction/:id" element={<PredictionDetailPage />} />
+            <Route path="/coins" element={<CoinHistoryPage />} />
+            <Route path="/rewards" element={<RewardShopPage />} />
           </Route>
         </Routes>
       </AuthProvider>
