@@ -10,7 +10,11 @@ interface GameState {
   winner: 'red' | 'blue' | null
 }
 
-export function Scoreboard() {
+interface ScoreboardProps {
+  expanded?: boolean
+}
+
+export function Scoreboard({ expanded = false }: ScoreboardProps) {
   const [state, setState] = useState<GameState>({
     redPoints: 0,
     bluePoints: 0,
@@ -121,15 +125,16 @@ export function Scoreboard() {
 
           {/* 小分 - Large Box */}
           <div className={`
-            w-24 h-24 sm:w-28 sm:h-28 rounded-2xl flex items-center justify-center border-2 transition-colors
+            rounded-2xl flex items-center justify-center border-2 transition-all
+            ${expanded ? 'w-36 h-36' : 'w-24 h-24 sm:w-28 sm:h-28'}
             ${winner === 'red'
               ? 'bg-red-100 border-red-400 shadow-lg shadow-red-200'
               : 'bg-white border-red-200 shadow-inner'
             }
           `}>
-            <span className={`text-5xl sm:text-6xl font-black tabular-nums transition-all ${
-              winner === 'red' ? 'text-red-500 scale-110' : 'text-red-600'
-            }`}>
+            <span className={`font-black tabular-nums transition-all ${
+              expanded ? 'text-7xl' : 'text-5xl sm:text-6xl'
+            } ${winner === 'red' ? 'text-red-500 scale-110' : 'text-red-600'}`}>
               {redPoints}
             </span>
           </div>
@@ -145,17 +150,21 @@ export function Scoreboard() {
           </div>
 
           {/* +/- Buttons */}
-          <div className="flex items-center gap-3 mt-1">
+          <div className={`flex items-center gap-3 mt-1 ${expanded ? 'gap-4' : 'gap-3'}`}>
             <button
               onClick={() => handleAdjust('red', -1)}
               disabled={redPoints === 0}
-              className="w-9 h-9 rounded-full bg-red-100 hover:bg-red-200 text-red-600 text-lg font-bold transition active:scale-90 flex items-center justify-center border border-red-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              className={`rounded-full bg-red-100 hover:bg-red-200 text-red-600 font-bold transition active:scale-90 flex items-center justify-center border border-red-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                expanded ? 'w-12 h-12 text-2xl' : 'w-9 h-9 text-lg'
+              }`}
             >
               −
             </button>
             <button
               onClick={() => handleAdjust('red', 1)}
-              className="w-11 h-11 rounded-full bg-red-500 hover:bg-red-600 text-white text-xl font-bold transition active:scale-90 flex items-center justify-center shadow-md shadow-red-200"
+              className={`rounded-full bg-red-500 hover:bg-red-600 text-white font-bold transition active:scale-90 flex items-center justify-center shadow-md shadow-red-200 ${
+                expanded ? 'w-14 h-14 text-2xl' : 'w-11 h-11 text-xl'
+              }`}
             >
               +
             </button>
@@ -179,15 +188,16 @@ export function Scoreboard() {
 
           {/* 小分 - Large Box */}
           <div className={`
-            w-24 h-24 sm:w-28 sm:h-28 rounded-2xl flex items-center justify-center border-2 transition-colors
+            rounded-2xl flex items-center justify-center border-2 transition-all
+            ${expanded ? 'w-36 h-36' : 'w-24 h-24 sm:w-28 sm:h-28'}
             ${winner === 'blue'
               ? 'bg-blue-100 border-blue-400 shadow-lg shadow-blue-200'
               : 'bg-white border-blue-200 shadow-inner'
             }
           `}>
-            <span className={`text-5xl sm:text-6xl font-black tabular-nums transition-all ${
-              winner === 'blue' ? 'text-blue-500 scale-110' : 'text-blue-600'
-            }`}>
+            <span className={`font-black tabular-nums transition-all ${
+              expanded ? 'text-7xl' : 'text-5xl sm:text-6xl'
+            } ${winner === 'blue' ? 'text-blue-500 scale-110' : 'text-blue-600'}`}>
               {bluePoints}
             </span>
           </div>
@@ -203,17 +213,21 @@ export function Scoreboard() {
           </div>
 
           {/* +/- Buttons */}
-          <div className="flex items-center gap-3 mt-1">
+          <div className={`flex items-center mt-1 ${expanded ? 'gap-4' : 'gap-3'}`}>
             <button
               onClick={() => handleAdjust('blue', -1)}
               disabled={bluePoints === 0}
-              className="w-9 h-9 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-600 text-lg font-bold transition active:scale-90 flex items-center justify-center border border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              className={`rounded-full bg-blue-100 hover:bg-blue-200 text-blue-600 font-bold transition active:scale-90 flex items-center justify-center border border-blue-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                expanded ? 'w-12 h-12 text-2xl' : 'w-9 h-9 text-lg'
+              }`}
             >
               −
             </button>
             <button
               onClick={() => handleAdjust('blue', 1)}
-              className="w-11 h-11 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold transition active:scale-90 flex items-center justify-center shadow-md shadow-blue-200"
+              className={`rounded-full bg-blue-500 hover:bg-blue-600 text-white font-bold transition active:scale-90 flex items-center justify-center shadow-md shadow-blue-200 ${
+                expanded ? 'w-14 h-14 text-2xl' : 'w-11 h-11 text-xl'
+              }`}
             >
               +
             </button>

@@ -21,6 +21,7 @@ import { TournamentSetupPage } from './pages/TournamentSetupPage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
 import { AdminPage } from './pages/AdminPage'
 import { HealthCheckinPage } from './pages/HealthCheckinPage'
+import { UtilityPage } from './pages/UtilityPage'
 
 export default function App() {
   useEffect(() => { initEngines() }, [])
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/tournaments/:id/setup" element={<TournamentSetupPage />} />
             <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
             <Route path="/health" element={<HealthCheckinPage />} />
+            <Route path="/utility" element={<UtilityPage />} />
           </Route>
         </Routes>
       </AuthProvider>

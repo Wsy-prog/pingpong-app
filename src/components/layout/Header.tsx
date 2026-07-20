@@ -68,6 +68,7 @@ export function Header() {
             <Link to="/matchmaking" className="text-sm text-gray-600 hover:text-blue-600">约球</Link>
             <Link to="/tournaments/new" className="text-sm text-gray-600 hover:text-blue-600">赛事</Link>
             <Link to="/rankings" className="text-sm text-gray-600 hover:text-blue-600">排名</Link>
+            <Link to="/utility" className="text-sm text-gray-600 hover:text-blue-600">工具</Link>
             <Link to="/chat" className="relative text-sm text-gray-600 hover:text-blue-600">
               聊天
               {chatUnread > 0 && (

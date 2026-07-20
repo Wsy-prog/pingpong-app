@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { UtilityTool } from '../components/utility/UtilityTool'
-import { Scoreboard } from '../components/utility/Scoreboard'
 import type { Announcement } from '../types'
 
 function localDateStr(): string {
@@ -37,6 +35,8 @@ const features = [
   { title: '赛事中心', path: '/tournaments', icon: '🏆', color: 'bg-yellow-100 text-yellow-600' },
   { title: '实时排名', path: '/rankings', icon: '📊', color: 'bg-blue-100 text-blue-600' },
   { title: '聊天大厅', path: '/chat', icon: '💬', color: 'bg-indigo-100 text-indigo-600' },
+  { title: '实用工具', path: '/utility', icon: '🧰', color: 'bg-orange-100 text-orange-600' },
+  { title: '健康打卡', path: '/health', icon: '💪', color: 'bg-rose-100 text-rose-600' },
 ]
 
 export function LobbyPage() {
@@ -263,7 +263,7 @@ export function LobbyPage() {
       </div>
 
       {/* 功能入口 */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {features.map(f => (
           <Link
             key={f.path}
@@ -276,13 +276,6 @@ export function LobbyPage() {
             <p className="font-medium text-sm">{f.title}</p>
           </Link>
         ))}
-        <Link to="/health"
-          className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
-          <div className="inline-block p-2 rounded-lg bg-rose-100 text-rose-600 mb-2">
-            <span className="text-xl">💪</span>
-          </div>
-          <p className="font-medium text-sm">健康打卡</p>
-        </Link>
         <Link to={`/profile/${profile?.id}`}
           className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
           <div className="inline-block p-2 rounded-lg bg-pink-100 text-pink-600 mb-2">
@@ -290,20 +283,6 @@ export function LobbyPage() {
           </div>
           <p className="font-medium text-sm">个人中心</p>
         </Link>
-      </div>
-
-      {/* 实用工具 */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b">
-          <h2 className="font-bold flex items-center gap-2">
-            🧰 实用工具
-          </h2>
-        </div>
-        <div>
-          <UtilityTool title="🏓 记分牌" defaultOpen>
-            <Scoreboard />
-          </UtilityTool>
-        </div>
       </div>
 
       {/* 乒协资讯 */}
