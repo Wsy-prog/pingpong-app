@@ -24,9 +24,9 @@ CREATE TABLE IF NOT EXISTS public.coin_transactions (
   note          TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_ct_profile ON coin_transactions(profile_id);
-CREATE INDEX idx_ct_type ON coin_transactions(type);
-CREATE INDEX idx_ct_created ON coin_transactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ct_profile ON coin_transactions(profile_id);
+CREATE INDEX IF NOT EXISTS idx_ct_type ON coin_transactions(type);
+CREATE INDEX IF NOT EXISTS idx_ct_created ON coin_transactions(created_at DESC);
 
 -- 3. daily_checkins (每日签到)
 CREATE TABLE IF NOT EXISTS public.daily_checkins (
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS public.daily_checkins (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, checkin_date)
 );
-CREATE INDEX idx_dc_user ON daily_checkins(user_id);
-CREATE INDEX idx_dc_date ON daily_checkins(checkin_date DESC);
+CREATE INDEX IF NOT EXISTS idx_dc_user ON daily_checkins(user_id);
+CREATE INDEX IF NOT EXISTS idx_dc_date ON daily_checkins(checkin_date DESC);
 
 -- 4. prediction_events (竞猜事件)
 CREATE TABLE IF NOT EXISTS public.prediction_events (
@@ -60,9 +60,9 @@ CREATE TABLE IF NOT EXISTS public.prediction_events (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   settled_at      TIMESTAMPTZ
 );
-CREATE INDEX idx_pe_status ON prediction_events(status);
-CREATE INDEX idx_pe_match ON prediction_events(match_id);
-CREATE INDEX idx_pe_deadline ON prediction_events(deadline);
+CREATE INDEX IF NOT EXISTS idx_pe_status ON prediction_events(status);
+CREATE INDEX IF NOT EXISTS idx_pe_match ON prediction_events(match_id);
+CREATE INDEX IF NOT EXISTS idx_pe_deadline ON prediction_events(deadline);
 
 -- 5. prediction_bets (用户投注)
 CREATE TABLE IF NOT EXISTS public.prediction_bets (
@@ -76,8 +76,8 @@ CREATE TABLE IF NOT EXISTS public.prediction_bets (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(event_id, user_id)
 );
-CREATE INDEX idx_pb_event ON prediction_bets(event_id);
-CREATE INDEX idx_pb_user ON prediction_bets(user_id);
+CREATE INDEX IF NOT EXISTS idx_pb_event ON prediction_bets(event_id);
+CREATE INDEX IF NOT EXISTS idx_pb_user ON prediction_bets(user_id);
 
 -- 6. reward_items (可兑换奖励)
 CREATE TABLE IF NOT EXISTS public.reward_items (
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.reward_redemptions (
                 CHECK (status IN ('pending', 'fulfilled', 'cancelled')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_rr_user ON reward_redemptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_rr_user ON reward_redemptions(user_id);
 
 -- =============================================
 -- RPC 函数
