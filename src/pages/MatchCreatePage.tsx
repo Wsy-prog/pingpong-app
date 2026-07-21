@@ -74,7 +74,7 @@ export function MatchCreatePage() {
 
     // 若开启竞猜，自动创建 prediction_event
     if (predictionEnabled) {
-      await supabase.from('prediction_events').insert({
+      const { error: peError } = await supabase.from('prediction_events').insert({
         title: `${name1} vs ${name2}`,
         event_type: 'platform_match',
         match_id: data.id,
@@ -85,6 +85,12 @@ export function MatchCreatePage() {
         deadline: matchDate || new Date(Date.now() + 7 * 86400000).toISOString(),
         created_by: profile.id,
       })
+      if (peError) {
+        console.error('创建竞猜事件失败:', peError)
+        setError(`比赛已创建，但竞猜事件创建失败：${peError.message}`)
+        setSubmitting(false)
+        return
+      }
     }
 
     navigate(`/matches/${data.id}`)

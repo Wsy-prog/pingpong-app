@@ -56,8 +56,7 @@ export function PredictionDetailPage() {
       await placeBetRpc(user.id, id, selectedOption, betAmount)
       setSuccess('投注成功！')
       await refreshUser()
-      loadEvent()
-      loadBets()
+      await Promise.all([loadEvent(), loadBets()])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '投注失败')
     }
@@ -216,10 +215,10 @@ export function PredictionDetailPage() {
           <p className="text-xs text-gray-400">余额: {user?.coins || 0} 币</p>
           <button
             onClick={handlePlaceBet}
-            disabled={submitting || selectedOption === null}
+            disabled={submitting || selectedOption === null || !!myBet}
             className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? '投注中...' : myBet ? '修改投注' : `投注 ${betAmount} 币`}
+            {submitting ? '投注中...' : myBet ? '已投注' : `投注 ${betAmount} 币`}
           </button>
         </div>
       )}

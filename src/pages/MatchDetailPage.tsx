@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { settleMatchElo } from '../lib/elo'
+import { settlePredictionEvent } from '../lib/coins'
 import type { Match } from '../types'
 import { StatusBadge } from '../components/common/StatusBadge'
 
@@ -167,6 +168,21 @@ export function MatchDetailPage() {
       const winner = match.winner_name === match.player1_name ? 'player1' : 'player2'
       const { kFactor } = getEloParams(tournamentFormat, tournamentConfig)
       await settleMatchElo(supabase, match.id, p1Id, p2Id, winner, kFactor)
+
+      // 自动结算关联竞猜（仅管理员）
+      if (profile?.username === 'guanliyuan') {
+        const { data: pe } = await supabase
+          .from('prediction_events')
+          .select('id, status')
+          .eq('match_id', match.id)
+          .in('status', ['open', 'closed'])
+          .maybeSingle()
+        if (pe) {
+          const winningOption = match.winner_name === match.player1_name ? 0 : 1
+          await settlePredictionEvent(pe.id, winningOption)
+        }
+      }
+
       loadMatch()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '结算失败')

@@ -24,6 +24,7 @@ interface DisplayItem {
   winningLabel: string | null
   // for matches without events
   matchId?: string
+  createdBy?: string
   player1Name?: string
   player2Name?: string
   matchDate?: string | null
@@ -33,7 +34,7 @@ export function PredictionPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [items, setItems] = useState<DisplayItem[]>([])
-  const [filter, setFilter] = useState<'all' | 'open' | 'settled'>('all')
+  const [filter, setFilter] = useState<'all' | 'open' | 'closed' | 'settled'>('all')
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState<string | null>(null) // matchId being auto-created
 
@@ -45,6 +46,7 @@ export function PredictionPage() {
     // 1. 加载 prediction_events
     let evQuery = supabase.from('prediction_events').select('*').order('created_at', { ascending: false }).limit(30)
     if (filter === 'open') evQuery = evQuery.eq('status', 'open')
+    else if (filter === 'closed') evQuery = evQuery.eq('status', 'closed')
     else if (filter === 'settled') evQuery = evQuery.eq('status', 'settled')
     const { data: events } = await evQuery
     const eventList = (events || []) as PredictionEvent[]
@@ -55,7 +57,7 @@ export function PredictionPage() {
     // 2. 加载 prediction_enabled=true 的比赛（排除已完成/已取消 + 已有 event 的）
     let mQuery = supabase
       .from('matches')
-      .select('id, title, player1_name, player2_name, match_date, status')
+      .select('id, title, player1_name, player2_name, match_date, status, created_by')
       .eq('prediction_enabled', true)
       .not('status', 'in', '("completed","cancelled")')
       .order('match_date', { ascending: true })
@@ -95,6 +97,7 @@ export function PredictionPage() {
           deadline: m.match_date,
           winningLabel: null,
           matchId: m.id,
+          createdBy: m.created_by,
           player1Name: m.player1_name,
           player2Name: m.player2_name,
           matchDate: m.match_date,
@@ -111,8 +114,14 @@ export function PredictionPage() {
       navigate(`/prediction/${item.id}`)
       return
     }
-    // match → 自动创建 prediction_event
+    // match → 仅管理员或比赛创建者可自动创建 prediction_event
     if (!user || creating) return
+    const isAdmin = user.username === 'guanliyuan'
+    const isCreator = item.createdBy === user.id
+    if (!isAdmin && !isCreator) {
+      alert('仅比赛创建者或管理员可为此比赛创建竞猜')
+      return
+    }
     setCreating(item.id)
 
     const { data, error } = await supabase.from('prediction_events').insert({
@@ -152,12 +161,12 @@ export function PredictionPage() {
 
       {/* Filter Tabs */}
       <div className="flex gap-2">
-        {(['all', 'open', 'settled'] as const).map(f => (
+        {(['all', 'open', 'closed', 'settled'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
               filter === f ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
             }`}>
-            {f === 'all' ? '全部' : f === 'open' ? '进行中' : '已结算'}
+            {f === 'all' ? '全部' : f === 'open' ? '进行中' : f === 'closed' ? '已关闭' : '已结算'}
           </button>
         ))}
         <div className="flex-1" />

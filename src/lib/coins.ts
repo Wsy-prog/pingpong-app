@@ -2,6 +2,15 @@ import { supabase } from './supabase'
 import type { CoinTransaction } from '../types'
 
 /**
+ * 检查 RPC 返回的业务错误
+ */
+function checkRpcResult(data: any) {
+  if (data && typeof data === 'object' && data.error) {
+    throw new Error(data.error)
+  }
+}
+
+/**
  * 获取用户金币余额
  */
 export async function getUserCoins(userId: string): Promise<number> {
@@ -19,6 +28,7 @@ export async function getUserCoins(userId: string): Promise<number> {
 export async function dailyCheckin(userId: string) {
   const { data, error } = await supabase.rpc('daily_checkin', { p_user_id: userId })
   if (error) throw error
+  checkRpcResult(data)
   return data as { coins_earned: number; streak_count: number; balance: number }
 }
 
@@ -69,6 +79,7 @@ export async function placeBet(userId: string, eventId: string, optionIndex: num
     p_amount: amount,
   })
   if (error) throw error
+  checkRpcResult(data)
   return data
 }
 
@@ -81,6 +92,7 @@ export async function settlePredictionEvent(eventId: string, winningOption: numb
     p_winning_option: winningOption,
   })
   if (error) throw error
+  checkRpcResult(data)
   return data
 }
 
@@ -92,6 +104,7 @@ export async function cancelPredictionEvent(eventId: string) {
     p_event_id: eventId,
   })
   if (error) throw error
+  checkRpcResult(data)
   return data
 }
 
@@ -104,6 +117,7 @@ export async function redeemReward(userId: string, itemId: string) {
     p_item_id: itemId,
   })
   if (error) throw error
+  checkRpcResult(data)
   return data
 }
 
@@ -118,6 +132,7 @@ export async function adminGrantCoins(adminId: string, targetId: string, amount:
     p_note: note,
   })
   if (error) throw error
+  checkRpcResult(data)
   return data
 }
 

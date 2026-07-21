@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.prediction_events (
   status          TEXT NOT NULL DEFAULT 'open'
                   CHECK (status IN ('open', 'closed', 'settled', 'cancelled')),
   winning_option  INTEGER,
-  house_cut       REAL NOT NULL DEFAULT 0.05,
+  house_cut       REAL NOT NULL DEFAULT 0.05 CHECK (house_cut >= 0 AND house_cut <= 1),
   deadline        TIMESTAMPTZ,
   created_by      UUID NOT NULL REFERENCES public.profiles(id),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -182,25 +182,29 @@ BEGIN
     RETURN json_build_object('error', '已过投注截止时间');
   END IF;
 
-  -- 检查是否已投注
+  -- 检查选项有效性
+  IF p_option_index < 0 OR p_option_index >= jsonb_array_length(v_event.options) THEN
+    RETURN json_build_object('error', '无效的投注选项');
+  END IF;
+
+  IF p_amount < 1 THEN
+    RETURN json_build_object('error', '投注金额至少为1币');
+  END IF;
+
+  -- 检查是否已投注（先查，避免无意义锁行）
   SELECT * INTO v_existing FROM public.prediction_bets
   WHERE event_id = p_event_id AND user_id = p_user_id;
   IF FOUND THEN
     RETURN json_build_object('error', '已投注过该事件');
   END IF;
 
-  -- 检查选项有效性
-  IF p_option_index < 0 OR p_option_index >= jsonb_array_length(v_event.options) THEN
-    RETURN json_build_object('error', '无效的投注选项');
+  -- 检查余额并加行锁（防并发超扣）
+  SELECT coins INTO v_balance FROM public.profiles WHERE id = p_user_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN json_build_object('error', '用户不存在');
   END IF;
-
-  -- 检查余额
-  SELECT coins INTO v_balance FROM public.profiles WHERE id = p_user_id;
   IF v_balance < p_amount THEN
     RETURN json_build_object('error', '金币不足');
-  END IF;
-  IF p_amount < 1 THEN
-    RETURN json_build_object('error', '投注金额至少为1币');
   END IF;
 
   -- 扣币
@@ -229,15 +233,24 @@ CREATE OR REPLACE FUNCTION public.settle_prediction_event(
 ) RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_event RECORD;
+  v_admin RECORD;
   v_total_pool INTEGER;
   v_house_fee INTEGER;
   v_prize_pool INTEGER;
   v_winner_pool INTEGER;
   v_bet RECORD;
   v_won INTEGER;
+  v_distributed INTEGER := 0;
   v_balance INTEGER;
   v_winner_count INTEGER := 0;
+  v_option_count INTEGER;
 BEGIN
+  -- 管理员权限校验（调用者必须是 guanliyuan）
+  SELECT username INTO v_admin FROM public.profiles WHERE id = auth.uid();
+  IF NOT FOUND OR v_admin.username IS NULL OR v_admin.username != 'guanliyuan' THEN
+    RETURN json_build_object('error', '仅管理员可操作');
+  END IF;
+
   -- 获取事件
   SELECT * INTO v_event FROM public.prediction_events WHERE id = p_event_id;
   IF NOT FOUND THEN
@@ -245,6 +258,12 @@ BEGIN
   END IF;
   IF v_event.status != 'open' AND v_event.status != 'closed' THEN
     RETURN json_build_object('error', '事件状态不允许结算');
+  END IF;
+
+  -- 校验获胜选项合法性
+  v_option_count := COALESCE(jsonb_array_length(v_event.options), 0);
+  IF p_winning_option IS NULL OR p_winning_option < 0 OR p_winning_option >= v_option_count THEN
+    RETURN json_build_object('error', '无效的获胜选项');
   END IF;
 
   -- 计算奖池
@@ -257,26 +276,35 @@ BEGIN
   FROM public.prediction_bets
   WHERE event_id = p_event_id AND option_index = p_winning_option;
 
-  -- 分红给赢家
+  -- 分红给赢家（最后一个赢家分剩余，防止 CEIL 累积超发）
   IF v_winner_pool > 0 THEN
     FOR v_bet IN
       SELECT * FROM public.prediction_bets
       WHERE event_id = p_event_id AND option_index = p_winning_option
+      ORDER BY id
     LOOP
-      v_won := CEIL((v_bet.amount::REAL / v_winner_pool::REAL) * v_prize_pool);
+      v_winner_count := v_winner_count + 1;
+      IF v_winner_count = (SELECT COUNT(*) FROM public.prediction_bets WHERE event_id = p_event_id AND option_index = p_winning_option) THEN
+        -- 最后一个赢家：分剩余奖池，避免向上取整累积超发
+        v_won := GREATEST(0, v_prize_pool - v_distributed);
+      ELSE
+        v_won := FLOOR((v_bet.amount::REAL / v_winner_pool::REAL) * v_prize_pool);
+      END IF;
 
-      UPDATE public.profiles SET coins = coins + v_won WHERE id = v_bet.user_id
-      RETURNING coins INTO v_balance;
+      IF v_won > 0 THEN
+        UPDATE public.profiles SET coins = coins + v_won WHERE id = v_bet.user_id
+        RETURNING coins INTO v_balance;
+
+        INSERT INTO public.coin_transactions (profile_id, amount, type, reference_id, balance_after, note)
+        VALUES (v_bet.user_id, v_won, 'bet_win', p_event_id, v_balance,
+                '竞猜获胜 +' || v_won || '币 (投' || v_bet.amount || '得' || v_won || ')');
+      END IF;
 
       UPDATE public.prediction_bets
       SET settled = true, won_amount = v_won
       WHERE id = v_bet.id;
 
-      INSERT INTO public.coin_transactions (profile_id, amount, type, reference_id, balance_after, note)
-      VALUES (v_bet.user_id, v_won, 'bet_win', p_event_id, v_balance,
-              '竞猜获胜 +' || v_won || '币 (投' || v_bet.amount || '得' || v_won || ')');
-
-      v_winner_count := v_winner_count + 1;
+      v_distributed := v_distributed + v_won;
     END LOOP;
   END IF;
 
@@ -295,7 +323,8 @@ BEGIN
     'house_fee', v_house_fee,
     'prize_pool', v_prize_pool,
     'winner_pool', v_winner_pool,
-    'winner_count', v_winner_count
+    'winner_count', v_winner_count,
+    'distributed', v_distributed
   );
 END;
 $$;
@@ -372,6 +401,10 @@ BEGIN
     RETURN json_build_object('error', '仅管理员可操作');
   END IF;
 
+  IF p_amount <= 0 THEN
+    RETURN json_build_object('error', '发放金额必须大于0');
+  END IF;
+
   -- 发币
   UPDATE public.profiles SET coins = coins + p_amount WHERE id = p_target_id
   RETURNING coins INTO v_balance;
@@ -389,10 +422,17 @@ CREATE OR REPLACE FUNCTION public.cancel_prediction_event(p_event_id UUID)
 RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_event RECORD;
+  v_admin RECORD;
   v_bet RECORD;
   v_balance INTEGER;
   v_count INTEGER := 0;
 BEGIN
+  -- 管理员权限校验
+  SELECT username INTO v_admin FROM public.profiles WHERE id = auth.uid();
+  IF NOT FOUND OR v_admin.username IS NULL OR v_admin.username != 'guanliyuan' THEN
+    RETURN json_build_object('error', '仅管理员可操作');
+  END IF;
+
   SELECT * INTO v_event FROM public.prediction_events WHERE id = p_event_id;
   IF NOT FOUND THEN
     RETURN json_build_object('error', '事件不存在');
@@ -408,7 +448,7 @@ BEGIN
     RETURNING coins INTO v_balance;
 
     UPDATE public.prediction_bets
-    SET settled = true, won_amount = v_bet.amount
+    SET settled = true, won_amount = 0
     WHERE id = v_bet.id;
 
     INSERT INTO public.coin_transactions (profile_id, amount, type, reference_id, balance_after, note)

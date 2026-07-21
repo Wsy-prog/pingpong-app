@@ -14,8 +14,20 @@ interface UserInfo {
 }
 
 export function AdminPage() {
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const navigate = useNavigate()
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-lg mx-auto py-10 text-center">
+        <p className="text-red-600 font-medium">⛔ 仅管理员可访问此页面</p>
+        <button onClick={() => navigate('/')} className="mt-4 text-blue-600 text-sm">
+          返回首页
+        </button>
+      </div>
+    )
+  }
+
   const [tab, setTab] = useState<'users' | 'chat' | 'matchmaking' | 'fortune' | 'announcements' | 'prediction' | 'rewards' | 'coingrants'>('users')
 
   // 用户管理
@@ -846,11 +858,13 @@ function PredictionAdmin() {
   }
 
   async function closeEvent(id: string) {
+    if (!window.confirm('确定要关闭该竞猜事件的投注吗？')) return
     await supabase.from('prediction_events').update({ status: 'closed' }).eq('id', id)
     loadEvents()
   }
 
   async function settleEvent(id: string, winningOption: number) {
+    if (!window.confirm('确定按此选项结算吗？结算后无法撤销。')) return
     const { error: err } = await supabase.rpc('settle_prediction_event', {
       p_event_id: id, p_winning_option: winningOption,
     })
@@ -860,6 +874,7 @@ function PredictionAdmin() {
   }
 
   async function cancelEvent(id: string) {
+    if (!window.confirm('确定要取消该竞猜事件并退还所有投注吗？')) return
     const { error: err } = await supabase.rpc('cancel_prediction_event', { p_event_id: id })
     if (err) { setError(err.message); return }
     setSuccess('已取消并退款')
